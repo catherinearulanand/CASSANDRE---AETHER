@@ -50,7 +50,7 @@ def test_G01_shortfall_creates_exactly_one_case_with_trace(db, tenant, up):
     e = cov[0]
     assert e["status"] == exp["expected_status"] and e["gap"] == exp["shortfall_inr"] and e["unit"] == "INR"
     assert e["measured"] == exp["posted_inr"] and e["limit"] == exp["required_inr"]
-    assert e["rule_key"] == "DEMO-ETD-COVERAGE" and e["rule_version"] == 2 and len(e["rule_hash"]) == 64
+    assert e["rule_key"] == "DEMO-ETD-COVERAGE" and e["rule_version"] == 1 and len(e["rule_hash"]) == 64
     assert e["fact_provenance"]["required_margin_inr"] == "SERVICE:risk.get_result"
     assert "posted only" in e["fact_provenance"]["eligible_collateral_inr"]
     assert any(t.get("op") == "gte" and t["result"] == "FALSE" for t in e["trace"]["condition"])

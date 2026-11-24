@@ -22,7 +22,7 @@ _MKT = {"in": ["market_type", ["OTC", "ETD_DOMESTIC", "ETD_IFSC"]]}
 
 LIBRARY: list[dict] = [
     {"control_key": "CMP-COV-ETD-INR", "family": "MARGIN_COVERAGE", "title": "Domestic ETD margin coverage (INR, per account)",
-     "rule_key": "DEMO-ETD-COVERAGE", "rule_version": 2, "severity": "HIGH", "max_staleness_hours": 24,
+     "rule_key": "DEMO-ETD-COVERAGE", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24,
      "scope": {"all": [{"eq": ["market_type", "ETD_DOMESTIC"]}, {"eq": ["venue", "DEMO_NSE"]}, {"eq": ["currency", "INR"]}]},
      "condition": {"gte": ["eligible_collateral_inr", "required_margin_inr"]},
      "required_inputs": ["required_margin_inr", "eligible_collateral_inr", "input_as_of"]},
