@@ -1,0 +1,13 @@
+var/
+.env
+.demo-credentials
+__pycache__/
+*.pyc
+.pytest_cache/
+.coverage
+node_modules/
+.next/
+frontend/.env.local
+*.db
+*.db-wal
+*.db-shm
