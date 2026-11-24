@@ -5,6 +5,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from app.core.config import get_settings
 from app.db.base import SessionLocal
 from app.engines.evidence import checkpoints as cps
@@ -21,6 +23,8 @@ def _run(script, *args):
     return subprocess.run([sys.executable, str(SCRIPTS / script), *args], capture_output=True, text=True, env=env, cwd=ROOT)
 
 
+@pytest.mark.skipif(not os.environ.get("AETHER_TEST_DATABASE_URL", "sqlite").startswith("sqlite"),
+                    reason="backup.py/restore.py copy the SQLite file only; PostgreSQL backup (pg_dump + object store) is NOT implemented")
 def test_backup_restore_roundtrip_and_corruption(tenant, tmp_path):
     with SessionLocal() as s:
         h = objects.store_object(s, tenant, b"source-document-bytes", "SOURCE_DOCUMENT")

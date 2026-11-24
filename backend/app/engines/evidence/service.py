@@ -77,12 +77,20 @@ def append(
         raise Unavailable("Evidence service unavailable: material action blocked until evidence can be recorded",
                           code="EVIDENCE_UNAVAILABLE")
     now = utcnow()
-    head = session.get(EvChainHead, tenant_id)
-    if head is None:
-        session.add(EvChainHead(tenant_id=tenant_id))
-        session.flush()
+    if session.get(EvChainHead, tenant_id) is None:
+        # Atomic create-if-absent: two concurrent first appends for a new tenant must not both INSERT
+        # (PostgreSQL raised a unique violation here; SQLite's serialised writer had masked it).
+        if session.get_bind().dialect.name == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            session.execute(pg_insert(EvChainHead).values(tenant_id=tenant_id, sequence=0, head_hash=GENESIS, updated_at=now)
+                            .on_conflict_do_nothing(index_elements=["tenant_id"]))
+        else:
+            session.add(EvChainHead(tenant_id=tenant_id))
+            session.flush()
     # Lock the per-tenant chain head so concurrent appends serialise (no forks, no duplicate sequence).
-    head = session.execute(lock_for_update(select(EvChainHead).where(EvChainHead.tenant_id == tenant_id))).scalar_one()
+    # populate_existing: after waiting on the lock we must see the committed head, not a stale cached row.
+    head = session.execute(lock_for_update(select(EvChainHead).where(EvChainHead.tenant_id == tenant_id))
+                           .execution_options(populate_existing=True)).scalar_one()
     eid = event_id or new_id()
     if session.execute(select(EvEvent.sequence).where(EvEvent.tenant_id == tenant_id, EvEvent.event_id == eid)).first():
         raise Conflict(f"duplicate evidence event_id {eid}")

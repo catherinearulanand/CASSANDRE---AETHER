@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT))
 _tmp = tempfile.mkdtemp(prefix="aether-test-")
-os.environ["AETHER_DATABASE_URL"] = f"sqlite:///{Path(_tmp, 't.db').as_posix()}"
+os.environ["AETHER_DATABASE_URL"] = os.environ.get("AETHER_TEST_DATABASE_URL") or f"sqlite:///{Path(_tmp, 't.db').as_posix()}"
 os.environ["AETHER_ENVIRONMENT"] = "test"
 
 import pytest  # noqa: E402
@@ -46,5 +46,8 @@ def pytest_configure(config):
 
 @pytest.fixture(scope="session", autouse=True)
 def _schema():
-    from app.db.base import create_all
+    from app.db.base import Base, create_all, get_engine, import_all_models, is_sqlite
+    if not is_sqlite():  # PostgreSQL run: start from a clean schema so reruns are deterministic
+        import_all_models()
+        Base.metadata.drop_all(get_engine())
     create_all()

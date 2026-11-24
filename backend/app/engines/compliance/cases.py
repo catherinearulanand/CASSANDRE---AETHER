@@ -17,7 +17,7 @@ from app.core.canonical import content_hash
 from app.core.config import get_settings
 from app.core.errors import Blocked, Conflict, Forbidden, NotFound, ValidationFailed
 from app.core.events import emit
-from app.db.base import new_id, utcnow
+from app.db.base import lock_for_update, new_id, utcnow
 from app.db.models_core import ApprovalRow
 from app.engines.compliance import engine as E
 from app.engines.compliance.controls import LEGAL_AUTHORITY, WAIVABLE_AUTHORITY
@@ -40,7 +40,12 @@ def actor_of(p: Principal) -> dict:
 
 
 def get_case(session, tenant_id: str, case_id: str, lock: bool = False) -> CmpCase:
-    c = session.execute(select(CmpCase).where(CmpCase.tenant_id == tenant_id, CmpCase.case_id == case_id)).scalar_one_or_none()
+    q = select(CmpCase).where(CmpCase.tenant_id == tenant_id, CmpCase.case_id == case_id)
+    if lock:
+        # Row lock + refresh: the revision check that follows must see the committed row, not a stale read
+        # (without this, PostgreSQL let 4 of 5 concurrent updates pass the optimistic check).
+        q = lock_for_update(q).execution_options(populate_existing=True)
+    c = session.execute(q).scalar_one_or_none()
     if c is None:
         raise NotFound("Case not found")
     return c
@@ -113,7 +118,7 @@ def remedy_options(c: CmpCase) -> list[dict]:
 
 # --------------------------------------------------------------------------- transitions
 def transition(session, p: Principal, case_id: str, to_state: str, reason: str | None, expected_revision: int, as_of: datetime | None = None) -> CmpCase:
-    c = get_case(session, p.tenant_id, case_id)
+    c = get_case(session, p.tenant_id, case_id, lock=True)
     if c.revision != expected_revision:
         raise Conflict(f"case changed (revision {c.revision}, expected {expected_revision}); reload", code="REVISION_CONFLICT")
     if to_state not in TRANSITIONS.get(c.state, set()) and not (to_state == "DISMISSED" and c.state in TRANSITIONS):
@@ -213,7 +218,7 @@ def _resolve(session, p, c, reason, as_of):
 def remediate(session, p: Principal, case_id: str, body: dict) -> CmpCase:
     if not p.has(*MAKER_ROLES):
         raise Forbidden("Requires maker, compliance_officer or tenant_admin role")
-    c = get_case(session, p.tenant_id, case_id)
+    c = get_case(session, p.tenant_id, case_id, lock=True)
     if c.revision != body.get("expected_revision"):
         raise Conflict("case changed; reload", code="REVISION_CONFLICT")
     if c.state != "INVESTIGATING":

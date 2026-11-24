@@ -15,7 +15,7 @@ from app.core.canonical import domain_hash, sha256_hex
 from app.core.config import get_settings
 from app.core.errors import Blocked, Conflict, Forbidden, NotFound, ValidationFailed
 from app.core.events import emit
-from app.db.base import new_id, utcnow
+from app.db.base import lock_for_update, new_id, utcnow
 from app.db.models_core import ApprovalRow
 from app.engines.regulatory import documents as D
 from app.engines.regulatory import dsl
@@ -49,8 +49,14 @@ def get_source(db, tenant_id: str, sid: str) -> RegSource:
     return s
 
 
-def get_rule(db, tenant_id: str, rid: str) -> RegRule:
-    r = db.get(RegRule, rid)
+def get_rule(db, tenant_id: str, rid: str, lock: bool = False) -> RegRule:
+    if lock:
+        # Mutations take a row lock and refresh, so the optimistic-revision / approval-state checks that follow
+        # see committed data (otherwise two checkers can both pass the check concurrently on PostgreSQL).
+        q = lock_for_update(select(RegRule).where(RegRule.rule_id == rid, RegRule.tenant_id == tenant_id))             .execution_options(populate_existing=True)
+        r = db.execute(q).scalar_one_or_none()
+    else:
+        r = db.get(RegRule, rid)
     if r is None or r.tenant_id != tenant_id:
         raise NotFound("Rule not found")
     return r
@@ -274,7 +280,7 @@ def _spans_exist(db, r: RegRule) -> None:
 
 
 def update_draft(db, actor: Principal, rule_id: str, changes: dict, expected_revision: int | None, corr=None) -> RegRule:
-    r = get_rule(db, actor.tenant_id, rule_id)
+    r = get_rule(db, actor.tenant_id, rule_id, lock=True)
     if r.status != "DRAFT":
         raise Conflict(f"only DRAFT rules are editable (status {r.status}); approved content is immutable", code="NOT_EDITABLE")
     if r.maker_id != actor.user_id:
@@ -295,7 +301,7 @@ def update_draft(db, actor: Principal, rule_id: str, changes: dict, expected_rev
 
 def revise(db, actor: Principal, rule_id: str, rationale: str, effective_from: datetime | None, corr=None) -> RegRule:
     """New version cloned from an existing one (amendment OR emergency rollback). Never edits history."""
-    old = get_rule(db, actor.tenant_id, rule_id)
+    old = get_rule(db, actor.tenant_id, rule_id, lock=True)
     tests = [t.vector for t in db.execute(select(RegRuleTest).where(RegRuleTest.rule_id == old.rule_id)).scalars()]
     return create_rule(db, actor, {
         "rule_key": old.rule_key, "authority_type": old.authority_type, "scope": old.scope, "condition": old.condition,
@@ -329,7 +335,7 @@ def _check_basis(db, r: RegRule) -> list[str]:
 
 
 def submit(db, actor: Principal, rule_id: str, reason: str, expected_revision: int | None, corr=None) -> RegRule:
-    r = get_rule(db, actor.tenant_id, rule_id)
+    r = get_rule(db, actor.tenant_id, rule_id, lock=True)
     if r.status != "DRAFT":
         raise Conflict(f"only DRAFT can be submitted (status {r.status})", code="ILLEGAL_TRANSITION")
     if r.maker_id != actor.user_id:
@@ -372,7 +378,7 @@ def _deny(db, actor, r, code: str, msg: str, corr):
 
 
 def review(db, actor: Principal, rule_id: str, decision: str, reason: str, expected_revision: int | None, corr=None) -> RegRule:
-    r = get_rule(db, actor.tenant_id, rule_id)
+    r = get_rule(db, actor.tenant_id, rule_id, lock=True)
     if decision not in ("APPROVE", "REJECT"):
         raise ValidationFailed("decision must be APPROVE or REJECT", field_errors={"decision": "invalid"})
     if not reason.strip():
@@ -421,7 +427,7 @@ def activate(db, actor: Principal, rule_id: str, expected_revision: int | None, 
              recorded_at: datetime | None = None, corr=None) -> RegRule:
     """Explicit human activation. Future effective_from => SCHEDULED (never ACTIVE before its effective time).
     `as_of` is the scenario clock for that decision; `recorded_at` is for deterministic fixtures only (not exposed on the API)."""
-    r = get_rule(db, actor.tenant_id, rule_id)
+    r = get_rule(db, actor.tenant_id, rule_id, lock=True)
     if not reason.strip():
         raise ValidationFailed("reason mandatory", field_errors={"reason": "required"})
     if r.status != "APPROVED":
@@ -495,7 +501,7 @@ def advance_states(db, actor: Principal, now: datetime, corr=None) -> list[str]:
 
 
 def withdraw(db, actor: Principal, rule_id: str, reason: str, expected_revision: int | None, recorded_at: datetime | None = None, corr=None) -> RegRule:
-    r = get_rule(db, actor.tenant_id, rule_id)
+    r = get_rule(db, actor.tenant_id, rule_id, lock=True)
     if not reason.strip():
         raise ValidationFailed("reason mandatory", field_errors={"reason": "required"})
     if r.status not in ("APPROVED", "SCHEDULED", "ACTIVE"):

@@ -62,7 +62,7 @@ def _reason(reason: str | None) -> str:
 def get_package(db, tenant_id: str, package_id: str, lock: bool = False) -> ConPackage:
     q = select(ConPackage).where(ConPackage.tenant_id == tenant_id, ConPackage.package_id == package_id)
     if lock:
-        q = lock_for_update(q)
+        q = lock_for_update(q).execution_options(populate_existing=True)
     pkg = db.execute(q).scalar_one_or_none()
     if pkg is None:
         raise NotFound("Agreement package not found")
