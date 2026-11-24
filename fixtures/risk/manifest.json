@@ -1,0 +1,51 @@
+{
+  "generator": "hand-authored fixtures; manifest by make_manifest.py v1",
+  "seed": 42,
+  "scenario_ids": [
+    "OTC-SHOCK-G03",
+    "ETD-DOM-G01",
+    "ETD-IFSC-G20"
+  ],
+  "as_of": "2026-08-17T04:00:00Z",
+  "schema_version": "1",
+  "classification": "SYNTHETIC - fictional parties/venues, not real market data",
+  "licence": "project-internal synthetic",
+  "dependency_ids": [
+    "MA-MER-NWD-001",
+    "NS-MER-NWD-001",
+    "ACC-DEMO-NSE-001",
+    "ACC-DEMO-IFSC-001"
+  ],
+  "files": [
+    {
+      "path": "clearing_ifsc_001.csv",
+      "sha256": "1a862b73cf75e4179cc505d4aab2e8cf0dabc5c150ca1938e811502758df9a70",
+      "bytes": 365,
+      "rows": 3
+    },
+    {
+      "path": "clearing_nse_001.csv",
+      "sha256": "6f3b2fb2a067952e9aef4b3640ff8f1ac5ba4b9d72d83219d48d1a2298ee2c10",
+      "bytes": 364,
+      "rows": 3
+    },
+    {
+      "path": "clearing_nse_badtotal.csv",
+      "sha256": "89fc23e2621d1a280535e3cdccbc9aa918926f194a126fc5aec761fa661f0ca2",
+      "bytes": 364,
+      "rows": 3
+    },
+    {
+      "path": "portfolio.json",
+      "sha256": "57b1723b6ffacdb55395967da029a8e964e9445732e434cebc8292690befbb96",
+      "bytes": 2241,
+      "rows": null
+    },
+    {
+      "path": "snapshots.json",
+      "sha256": "41baeedf7caae82ba01081f93bcbc95ea810f3d5a98902ea2f4a3e39ffd5d587",
+      "bytes": 3117,
+      "rows": null
+    }
+  ]
+}

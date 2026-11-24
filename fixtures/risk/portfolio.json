@@ -1,0 +1,22 @@
+{
+  "instruments": [
+    {"instrument_id": "FUT-DEMO-NSE-IDX-SEP26", "type": "FUT", "venue": "DEMO_NSE", "currency": "INR", "multiplier": "25", "expiry": "2026-09-29", "settlement_type": "CASH"},
+    {"instrument_id": "OPT-DEMO-NSE-IDX-24000C-SEP26", "type": "OPT", "venue": "DEMO_NSE", "currency": "INR", "multiplier": "25", "expiry": "2026-09-29", "settlement_type": "CASH",
+     "strike": "24000", "option_type": "CALL", "exercise": "EUROPEAN", "underlying_id": "FUT-DEMO-NSE-IDX-SEP26"},
+    {"instrument_id": "FUT-DEMO-IFSC-IDX-SEP26", "type": "FUT", "venue": "DEMO_IFSC", "currency": "USD", "multiplier": "10", "expiry": "2026-09-29", "settlement_type": "CASH"}
+  ],
+  "trades": [
+    {"trade_id": "TRD-FXF-001", "master_id": "MA-MER-NWD-001", "netting_set_id": "NS-MER-NWD-001", "type": "FXF", "side": "BUY", "base_ccy": "EUR", "quote_ccy": "USD",
+     "notional_base": "100000000", "strike": "1.11", "maturity": "2026-11-17", "curve_base": "EUR-FLAT0", "curve_quote": "USD-FLAT0"},
+    {"trade_id": "TRD-FXF-OTH-001", "master_id": "MA-MER-OTH-002", "netting_set_id": "NS-MER-OTH-002", "type": "FXF", "side": "SELL", "base_ccy": "EUR", "quote_ccy": "USD",
+     "notional_base": "100000000", "strike": "1.075", "maturity": "2026-11-17", "curve_base": "EUR-FLAT0", "curve_quote": "USD-FLAT0"},
+    {"trade_id": "TRD-IRS-OTH-001", "master_id": "MA-MER-OTH-002", "netting_set_id": "NS-MER-OTH-002", "type": "IRS", "pay_receive": "PAY_FIXED", "notional": "50000000", "currency": "USD",
+     "fixed_rate": "0.04", "effective": "2026-08-17", "maturity": "2028-08-17", "freq_months": 6, "fixed_dc": "ACT/360", "float_dc": "ACT/360",
+     "curve_disc": "USD-SOFR-DISC", "curve_proj": "USD-SOFR-PROJ"}
+  ],
+  "positions": [
+    {"account_id": "ACC-DEMO-NSE-001", "instrument_id": "FUT-DEMO-NSE-IDX-SEP26", "as_of": "2026-08-17T03:30:00Z", "signed_lots": "40", "settlement_price": "24000.00"},
+    {"account_id": "ACC-DEMO-NSE-001", "instrument_id": "OPT-DEMO-NSE-IDX-24000C-SEP26", "as_of": "2026-08-17T03:30:00Z", "signed_lots": "-20", "settlement_price": "650.00"},
+    {"account_id": "ACC-DEMO-IFSC-001", "instrument_id": "FUT-DEMO-IFSC-IDX-SEP26", "as_of": "2026-08-17T03:30:00Z", "signed_lots": "30", "settlement_price": "25000.00"}
+  ]
+}

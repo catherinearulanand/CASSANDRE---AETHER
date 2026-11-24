@@ -1,0 +1,76 @@
+[
+  {
+    "snapshot_id": "SNAP-QUIET-001",
+    "data_as_of": "2026-08-17T04:00:00Z",
+    "max_age_seconds": 86400,
+    "note": "SYNTHETIC. FLAT0 curves (DF=1) are chosen deliberately so FX-forward exposures are exactly hand-checkable: N*(S-K). EUR/USD 1.125 => 100,000,000*(1.125-1.11)=1,500,000 (G02).",
+    "payload": {
+      "curves": {
+        "EUR-FLAT0": {"currency": "EUR", "points": [["0", "1"], ["30", "1"]]},
+        "USD-FLAT0": {"currency": "USD", "points": [["0", "1"], ["30", "1"]]},
+        "USD-SOFR-DISC": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.98"], ["1", "0.96"], ["2", "0.92"], ["5", "0.80"]]},
+        "USD-SOFR-PROJ": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.9775"], ["1", "0.955"], ["2", "0.915"], ["5", "0.79"]]}
+      },
+      "fx": {"EURUSD": "1.125"},
+      "fixings": {}
+    }
+  },
+  {
+    "snapshot_id": "SNAP-SHOCK-001",
+    "data_as_of": "2026-08-17T04:00:00Z",
+    "max_age_seconds": 86400,
+    "note": "SYNTHETIC rate/FX shock: EUR/USD 1.3046951012 => 100,000,000*(1.3046951012-1.11)=19,469,510.12 (G03).",
+    "payload": {
+      "curves": {
+        "EUR-FLAT0": {"currency": "EUR", "points": [["0", "1"], ["30", "1"]]},
+        "USD-FLAT0": {"currency": "USD", "points": [["0", "1"], ["30", "1"]]},
+        "USD-SOFR-DISC": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.97"], ["1", "0.94"], ["2", "0.89"], ["5", "0.75"]]},
+        "USD-SOFR-PROJ": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.9675"], ["1", "0.935"], ["2", "0.885"], ["5", "0.74"]]}
+      },
+      "fx": {"EURUSD": "1.3046951012"},
+      "fixings": {}
+    }
+  },
+  {
+    "snapshot_id": "SNAP-STALE-001",
+    "data_as_of": "2026-08-14T04:00:00Z",
+    "max_age_seconds": 86400,
+    "note": "SYNTHETIC stale copy of the quiet snapshot (3 days old vs a 24h limit) for G21.",
+    "payload": {
+      "curves": {
+        "EUR-FLAT0": {"currency": "EUR", "points": [["0", "1"], ["30", "1"]]},
+        "USD-FLAT0": {"currency": "USD", "points": [["0", "1"], ["30", "1"]]},
+        "USD-SOFR-DISC": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.98"], ["1", "0.96"], ["2", "0.92"], ["5", "0.80"]]},
+        "USD-SOFR-PROJ": {"currency": "USD", "points": [["0", "1"], ["0.5", "0.9775"], ["1", "0.955"], ["2", "0.915"], ["5", "0.79"]]}
+      },
+      "fx": {"EURUSD": "1.125"},
+      "fixings": {}
+    }
+  },
+  {
+    "snapshot_id": "SNAP-ETD-001",
+    "data_as_of": "2026-08-17T03:30:00Z",
+    "max_age_seconds": 86400,
+    "note": "SYNTHETIC domestic ETD marks (INR). DEMO_NSE.",
+    "payload": {
+      "curves": {},
+      "fx": {},
+      "marks": {"FUT-DEMO-NSE-IDX-SEP26": "24000.00"},
+      "vols": {"OPT-DEMO-NSE-IDX-24000C-SEP26": "0.18"},
+      "rates": {"INR": "0.065"}
+    }
+  },
+  {
+    "snapshot_id": "SNAP-IFSC-001",
+    "data_as_of": "2026-08-17T03:30:00Z",
+    "max_age_seconds": 86400,
+    "note": "SYNTHETIC IFSC ETD marks (USD). DEMO_IFSC. Independent of the domestic INR profile (G20).",
+    "payload": {
+      "curves": {},
+      "fx": {},
+      "marks": {"FUT-DEMO-IFSC-IDX-SEP26": "25000.00"},
+      "vols": {},
+      "rates": {"USD": "0.045"}
+    }
+  }
+]

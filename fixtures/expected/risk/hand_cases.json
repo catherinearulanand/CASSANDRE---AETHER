@@ -1,0 +1,30 @@
+{
+  "_note": "Hand-calculated by the author on paper BEFORE the engine was run. Not produced by, and never imported by, production code.",
+  "irs_1y_annual": {
+    "valuation_date": "2026-08-17",
+    "trade": {"type": "IRS", "pay_receive": "RECEIVE_FIXED", "notional": "1000000", "currency": "USD", "fixed_rate": "0.05", "effective": "2026-08-17", "maturity": "2027-08-17",
+              "freq_months": 12, "fixed_dc": "ACT/365F", "float_dc": "ACT/365F", "curve_disc": "D", "curve_proj": "P"},
+    "curves": {"D": {"currency": "USD", "points": [["0", "1"], ["1", "0.95"]]}, "P": {"currency": "USD", "points": [["0", "1"], ["1", "0.96"]]}},
+    "hand": "fixed = 1,000,000*0.05*1*0.95 = 47,500 ; float = 1,000,000*(1/0.96-1)*0.95 = 1,000,000*(1/24)*0.95 = 39,583.3333333 ; receive-fixed PV = 7,916.6666667",
+    "pv_receive_fixed": "7916.66666667", "pv_pay_fixed": "-7916.66666667", "tolerance_abs": "0.00001"
+  },
+  "fx_forward_buy": {
+    "valuation_date": "2026-08-17",
+    "trade": {"type": "FXF", "side": "BUY", "base_ccy": "EUR", "quote_ccy": "USD", "notional_base": "1000000", "strike": "1.10", "maturity": "2027-08-17", "curve_base": "E", "curve_quote": "U"},
+    "curves": {"E": {"currency": "EUR", "points": [["0", "1"], ["1", "0.97"]]}, "U": {"currency": "USD", "points": [["0", "1"], ["1", "0.96"]]}},
+    "fx": {"EURUSD": "1.12"},
+    "hand": "1e6*(1.12*0.97 - 1.10*0.96) = 1e6*(1.0864-1.056) = 30,400 USD (quote ccy); SELL = -30,400",
+    "pv_quote_buy": "30400", "pv_quote_sell": "-30400", "tolerance_abs": "0.0000001"
+  },
+  "fx_orientation": {"fx": {"EURUSD": "1.12"}, "usd_to_eur_of_30400": "27142.857142857", "hand": "30,400 / 1.12 = 27,142.857142857...; EUR->USD of 1 EUR = 1.12", "tolerance_abs": "0.000001"},
+  "golden": {
+    "G02": {"exposure": "1500000", "threshold": "10000000", "target": "0", "required": "0", "direction": "NONE"},
+    "G03": {"exposure": "19469510.12", "unrounded": "9469510.12", "mta": "500000", "increment": "100000", "rounded_up": "9500000", "direction": "POST"},
+    "G04": {"mta": "500000", "below_unrounded": "499999.99", "at_unrounded": "500000", "semantics": "GTE"},
+    "G08": {"exposure": "19000000", "threshold_before": "10000000", "threshold_after": "8000000", "target_before": "9000000", "target_after": "11000000"},
+    "G09": {"set_a_net": "5000000", "set_b_net": "-5000000", "note": "separate exposures, never offset into 0"},
+    "G10": {"components": ["8000000", "2000000"], "total": "10000000", "supplied_bad_total": "10100000"},
+    "G25": {"target": "100", "held_same_direction": "150", "mta": "10", "return_unrounded": "50", "direction": "RETURN"},
+    "G01_margin_side": {"baseline_inr": "10000000", "revised_inr": "12500000", "delta_inr": "2500000", "multiplier": "1.25"}
+  }
+}

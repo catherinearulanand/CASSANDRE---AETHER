@@ -1,0 +1,10 @@
+{
+  "case": "irs_2y_semi_pay_fixed",
+  "valuation_date": "2026-08-17",
+  "pv_pay_fixed": 418209.091704,
+  "pv_receive_fixed": -418209.091704,
+  "tolerance_abs": 0.001,
+  "pv_fixed_leg": 3857548.211152,
+  "pv_float_leg": 4275757.302856,
+  "method": "independent float reference (_reference_calc.py)"
+}
