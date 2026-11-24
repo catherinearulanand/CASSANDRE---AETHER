@@ -13,7 +13,7 @@ from sqlalchemy import select
 
 from app.core import services
 from app.core.canonical import domain_hash
-from app.core.errors import Conflict
+from app.core.errors import Conflict, Unavailable
 from app.db.base import lock_for_update, new_id, utcnow
 from app.engines.evidence.models import EvChainHead, EvEvent
 
@@ -37,6 +37,16 @@ def compute_event_hash(tenant_id: str, sequence: int, prev_hash: str, fields: di
 
 def _fields_of(ev: EvEvent) -> dict:
     return {k: getattr(ev, k) for k in _HASHED_FIELDS}
+
+
+_STORAGE_OUTAGE = False
+
+
+def set_storage_outage(flag: bool) -> None:
+    """FAULT INJECTION for tests/runbook drills only (not reachable over HTTP). While set, append() refuses, so the
+    caller's transaction (which includes the domain change) fails: no material state transition without evidence (G24)."""
+    global _STORAGE_OUTAGE
+    _STORAGE_OUTAGE = bool(flag)
 
 
 def append(
@@ -63,6 +73,9 @@ def append(
     event_id: str | None = None,
     service_version: str = SERVICE_VERSION,
 ) -> EvEvent:
+    if _STORAGE_OUTAGE:
+        raise Unavailable("Evidence service unavailable: material action blocked until evidence can be recorded",
+                          code="EVIDENCE_UNAVAILABLE")
     now = utcnow()
     head = session.get(EvChainHead, tenant_id)
     if head is None:
@@ -90,7 +103,7 @@ def append(
     return ev
 
 
-def verify_chain(session, tenant_id: str, checkpoint: dict | None = None) -> dict:
+def verify_chain(session, tenant_id: str, checkpoint: dict | None = None, checkpoints: list[dict] | None = None) -> dict:
     """Recompute every hash. If a trusted checkpoint {sequence, head_hash} is supplied, also detect
     truncation / tail rewrite (a bare hash chain cannot detect a privileged truncation by itself)."""
     rows = session.execute(select(EvEvent).where(EvEvent.tenant_id == tenant_id).order_by(EvEvent.sequence)).scalars().all()
@@ -108,15 +121,28 @@ def verify_chain(session, tenant_id: str, checkpoint: dict | None = None) -> dic
     head = session.get(EvChainHead, tenant_id)
     if head is not None and (head.sequence != (rows[-1].sequence if rows else 0) or head.head_hash != (rows[-1].event_hash if rows else GENESIS)):
         problems.append({"problem": "HEAD_MISMATCH", "detail": "stored chain head differs from last event"})
-    if checkpoint is not None:
-        seq, hh = int(checkpoint["sequence"]), checkpoint["head_hash"]
-        match = next((e for e in rows if e.sequence == seq), None)
+    by_seq = {e.sequence: e for e in rows}
+    anchors = ([checkpoint] if checkpoint is not None else []) + list(checkpoints or [])
+    for cp in anchors:  # every trusted anchor is checked in the SAME pass over the rows
+        seq, hh = int(cp["sequence"]), cp["head_hash"]
+        match = by_seq.get(seq)
         if seq > 0 and (match is None or match.event_hash != hh):
-            problems.append({"problem": "CHECKPOINT_NOT_REPRODUCED", "detail": f"trusted checkpoint at seq {seq} not found/mismatched (truncation or rewrite)"})
+            problems.append({"problem": "CHECKPOINT_NOT_REPRODUCED", "anchor_sequence": seq,
+                             "detail": f"trusted checkpoint at seq {seq} not found/mismatched (truncation or rewrite)"})
     return {"tenant_id": tenant_id, "events": len(rows), "valid": not problems, "problems": problems,
             "head_sequence": rows[-1].sequence if rows else 0, "head_hash": rows[-1].event_hash if rows else GENESIS,
-            "checkpoint_checked": checkpoint is not None}
+            "checkpoint_checked": bool(anchors)}
+
+
+def check_expected_actions(session, tenant_id: str, correlation_id: str, expected: dict[str, list[str]]) -> dict:
+    """E-A01 helper for the lead: given {engine: [actions]} returns the (engine, action) pairs missing for a correlation."""
+    rows = session.execute(select(EvEvent.engine, EvEvent.action).where(
+        EvEvent.tenant_id == tenant_id, EvEvent.correlation_id == correlation_id)).all()
+    have = {(e, a) for e, a in rows}
+    missing = [{"engine": e, "action": a} for e, acts in expected.items() for a in acts if (e, a) not in have]
+    return {"complete": not missing, "missing": missing, "events_seen": len(rows)}
 
 
 services.register("evidence.append", append)
+services.register("evidence.check_expected_actions", check_expected_actions)
 services.register("evidence.verify_chain", verify_chain)

@@ -1,0 +1,75 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.3",
+    "cpu_count": 8,
+    "db": "SQLite (WAL, BEGIN IMMEDIATE) - NOT PostgreSQL",
+    "network": "none",
+    "commit": "57b1cf7"
+  },
+  "append_single_writer": {
+    "n": 200,
+    "p50_ms": 10.481,
+    "p95_ms": 19.303,
+    "p99_ms": 33.42,
+    "mean_ms": 11.653,
+    "max_ms": 54.82,
+    "failures": 0,
+    "target": "p95 < 100 ms",
+    "met": true,
+    "note": "one append per committed transaction, cold chain growing 0..200, warm process"
+  },
+  "append_contention_4_writers": {
+    "n": 160,
+    "p50_ms": 11.834,
+    "p95_ms": 75.086,
+    "p99_ms": 348.647,
+    "mean_ms": 34.441,
+    "max_ms": 1376.048,
+    "failures": 0,
+    "throughput_per_s": 80.9,
+    "chain_valid": true
+  },
+  "verify_chain_10000_events": {
+    "cold_ms": 1061.4,
+    "warm_p50_ms": 1107.9,
+    "runs": 5,
+    "target": "< 5000 ms",
+    "met": true,
+    "objects_100_hash_check_ms": 29.0,
+    "objects_valid": true,
+    "anchored_verify_ms": 1084.7,
+    "anchored_valid": true,
+    "note": "chain hashes recomputed for every event; object hashes reported separately"
+  },
+  "export_bundle_200_events_10k_chain": {
+    "n": 5,
+    "cold_ms": 1717.3,
+    "warm_p50_ms": 1515.2,
+    "note": "includes checkpoint signing, 10,200-row skeleton, zip, vault write, evidence append"
+  },
+  "earlier_run_not_discarded": {
+    "note": "First run, same machine, executed while five other engine workers were building/testing concurrently AND before the single-pass anchored-verification fix; kept for transparency. The later run above is the code as shipped but is also a single run on a shared, noisy machine - treat both as indicative, not typical.",
+    "append_single_writer": {
+      "p50_ms": 11.123,
+      "p95_ms": 17.979,
+      "p99_ms": 20.97
+    },
+    "append_contention_4_writers": {
+      "p95_ms": 71.426,
+      "p99_ms": 982.14,
+      "max_ms": 1387.81
+    },
+    "verify_chain_10000_events": {
+      "cold_ms": 3466.2,
+      "warm_p50_ms": 4450.9,
+      "anchored_verify_ms": 6808.2,
+      "anchored_target_met": false
+    },
+    "export_bundle_200_events_10k_chain": {
+      "cold_ms": 4107.9,
+      "warm_p50_ms": 4161.8
+    }
+  },
+  "known_bottleneck": "create_checkpoint (used by every export) re-verifies the full chain; incremental verification from the previous anchor is the next fix. Contention tail latency (p99 up to ~1 s) comes from SQLite single-writer serialisation; PostgreSQL row locks not measured here."
+}
