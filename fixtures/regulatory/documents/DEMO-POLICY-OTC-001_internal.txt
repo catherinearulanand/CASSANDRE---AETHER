@@ -1,0 +1,6 @@
+MERIDIAN DEMO BANK INTERNAL POLICY DEMO-POLICY-OTC-001
+Fictional internal policy for AETHER demonstrations. Not a statute and not a regulatory requirement.
+
+1. Bilateral OTC variation margin
+1.1 The treasury desk shall exchange variation margin each business day with every bilateral counterparty that has an approved CSA.
+1.2 Exposures in different netting sets are never offset against each other.

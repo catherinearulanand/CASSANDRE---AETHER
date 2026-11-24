@@ -1,0 +1,20 @@
+DEMO CLEARING NOTICE DEMO-CIRC-2026-001
+Issued by: Northwind Demo Clearing (fictional). SYNTHETIC DOCUMENT FOR AETHER TESTING - NOT LAW.
+
+1. Purpose
+1.1 This notice revises the synthetic margin policy for index futures cleared on DEMO_NSE.
+
+2. Margin multiplier
+2.1 With effect from 1 January 2027, the clearing member shall apply a margin multiplier of 1.25 times the base margin to index futures accounts on DEMO_NSE.
+2.2 Until that date the margin multiplier of 1.00 times the base margin continues to apply.
+
+3. Collateral coverage
+3.1 The clearing member shall hold eligible collateral of at least 100 per cent of required margin at all times.
+3.2 Eligible collateral is determined in accordance with Annexure A.
+
+4. Position limits
+4.1 A client shall not exceed 100 lots of net position in a single index futures contract.
+4.2 For paragraph 4.1, positions are aggregated per client classification.
+
+Annexure A
+A.1 Eligible collateral comprises cash and the synthetic instruments listed in the clearing schedule.

@@ -1,0 +1,5 @@
+DEMO CONSULTATION PAPER DEMO-CONSULT-2026-009 (DRAFT FOR COMMENT)
+Issued by: Northwind Demo Clearing (fictional). Draft consultation: NOT BINDING. SYNTHETIC.
+
+1. Proposal
+1.1 The clearing member shall apply a margin multiplier of 2.00 times the base margin to index futures accounts on DEMO_NSE.

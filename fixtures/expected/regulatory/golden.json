@@ -1,0 +1,30 @@
+{
+  "_note": "Hand-derived expectations. Production code never imports this directory. Reasoning is written beside each value.",
+  "G01": {
+    "reasoning": "base margin INR 10,000,000 x multiplier 1.00 = 10,000,000; x 1.25 = 12,500,000; delta = 2,500,000 (25 lakh); eligible posted 11,500,000; shortfall = max(0, 12,500,000 - 11,500,000) = 1,000,000 (10 lakh); baseline shortfall = max(0, 10,000,000 - 11,500,000) = 0",
+    "base_margin_inr": "10000000", "multiplier_baseline": "1.00", "multiplier_hypothetical": "1.25",
+    "baseline_required": "10000000", "hypothetical_required": "12500000", "delta_required": "2500000",
+    "eligible_posted": "11500000", "baseline_shortfall": "0", "hypothetical_shortfall": "1000000", "currency": "INR"
+  },
+  "G11": {
+    "reasoning": "limit 100 lots inclusive (<=): 100 passes, 101 fails; missing client classification makes the condition UNKNOWN even when lots <= limit",
+    "cases": [
+      {"lots": "100", "classification": "CLIENT", "condition": "TRUE"},
+      {"lots": "101", "classification": "CLIENT", "condition": "FALSE"},
+      {"lots": "100", "classification": null, "condition": "UNKNOWN"}
+    ]
+  },
+  "R-A04": {
+    "reasoning": "v1 effective 2026-03-01, v2 effective 2026-06-01 (both recorded 2026-01-15). at 2026-05-31T23:59:59Z the governing version is 1; at exactly 2026-06-01T00:00:00Z it is 2. A later-recorded v3 (recorded 2026-05-20, effective 2026-04-01) is invisible when known_at=2026-05-01.",
+    "before_boundary": 1, "at_boundary": 2
+  },
+  "three_valued_tables": {
+    "all": [["TRUE","TRUE","TRUE"],["TRUE","UNKNOWN","UNKNOWN"],["FALSE","UNKNOWN","FALSE"],["TRUE","FALSE","FALSE"],["UNKNOWN","UNKNOWN","UNKNOWN"]],
+    "any": [["TRUE","UNKNOWN","TRUE"],["FALSE","UNKNOWN","UNKNOWN"],["FALSE","FALSE","FALSE"],["UNKNOWN","UNKNOWN","UNKNOWN"]],
+    "not": [["TRUE","FALSE"],["FALSE","TRUE"],["UNKNOWN","UNKNOWN"]]
+  },
+  "R-A07": {
+    "reasoning": "identical pinned snapshot; only the margin multiplier rule revision differs; required margin moves by +25 lakh = INR 2,500,000",
+    "delta_required": "2500000"
+  }
+}

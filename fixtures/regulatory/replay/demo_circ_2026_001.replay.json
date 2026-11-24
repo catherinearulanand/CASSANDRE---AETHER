@@ -1,0 +1,26 @@
+{
+  "_label": "REPLAY: hand-labelled proposals keyed by source bytes. NOT a model run; confers no accuracy claim.",
+  "source_file": "DEMO-CIRC-2026-001_margin_revision.txt",
+  "candidates": [
+    {
+      "quote": "With effect from 1 January 2027, the clearing member shall apply a margin multiplier of 1.25 times the base margin to index futures accounts on DEMO_NSE.",
+      "fields": {"obligated_actor": "clearing member", "action": "apply margin multiplier", "metric": "margin multiplier", "comparator": "eq", "value": "1.25", "unit": "RATIO", "scope": {"venue": "DEMO_NSE", "market_type": "ETD_DOMESTIC"}, "exceptions": [], "deadline": "2027-01-01", "dependencies": []},
+      "issues": []
+    },
+    {
+      "quote": "The clearing member shall hold eligible collateral of at least 100 per cent of required margin at all times.",
+      "fields": {"obligated_actor": "clearing member", "action": "hold eligible collateral", "metric": "eligible collateral / required margin", "comparator": "gte", "value": "100", "unit": "PERCENT", "scope": {}, "exceptions": [], "deadline": null, "dependencies": ["Annexure A"]},
+      "issues": ["SCOPE_GAP"]
+    },
+    {
+      "quote": "A client shall not exceed 100 lots of net position in a single index futures contract.",
+      "fields": {"obligated_actor": "client", "action": "not exceed", "metric": "net position", "comparator": "lte", "value": "100", "unit": "LOTS", "scope": {}, "exceptions": [], "deadline": null, "dependencies": ["paragraph 4.2"]},
+      "issues": ["SCOPE_GAP"]
+    },
+    {
+      "quote": "The clearing member shall hold at least 250 per cent of required margin in gold bullion.",
+      "fields": {"obligated_actor": "clearing member", "action": "hold", "metric": "gold bullion", "comparator": "gte", "value": "250", "unit": "PERCENT", "scope": {}, "exceptions": [], "deadline": null, "dependencies": []},
+      "issues": ["NEGATIVE_CONTROL_FABRICATED_QUOTE"]
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+DEMO IFSC CLEARING NOTICE DEMO-CIRC-2026-002
+Issued by: Northwind Demo Clearing IFSC (fictional). SYNTHETIC DOCUMENT FOR AETHER TESTING - NOT LAW.
+
+1. Collateral coverage
+1.1 The IFSC clearing member shall hold eligible collateral of at least 100 per cent of required margin, measured in USD, on DEMO_IFSC.
+1.2 This notice does not apply to products cleared on domestic venues.
