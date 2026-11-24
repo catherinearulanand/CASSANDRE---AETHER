@@ -1,0 +1,26 @@
+# Persistent-demo stack. NOT a production deployment. NOT yet run on the author's machine (Docker daemon was unavailable).
+# DB port is NOT published to the host. Credentials come from the environment; no defaults are committed.
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: aether
+      POSTGRES_PASSWORD: ${AETHER_DB_PASSWORD:?set AETHER_DB_PASSWORD in your environment}
+      POSTGRES_DB: aether
+    volumes: [dbdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aether"]
+      interval: 5s
+      retries: 10
+    networks: [internal]
+  backend:
+    build: { context: ../backend, dockerfile: ../infra/backend.Dockerfile }
+    environment:
+      AETHER_DATABASE_URL: postgresql+psycopg://aether:${AETHER_DB_PASSWORD}@db:5432/aether
+      AETHER_ENVIRONMENT: demo
+    depends_on: { db: { condition: service_healthy } }
+    ports: ["127.0.0.1:8000:8000"]
+    volumes: [objects:/app/var/objects, keys:/app/var/keys]
+    networks: [internal]
+volumes: { dbdata: {}, objects: {}, keys: {} }
+networks: { internal: {} }

@@ -13,3 +13,4 @@ frontend/.env.local
 *.db-shm
 *.tsbuildinfo
 next-env.d.ts
+.claude/
