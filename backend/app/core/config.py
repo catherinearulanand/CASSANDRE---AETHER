@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     max_upload_bytes: int = 10 * 1024 * 1024
     approval_ttl_seconds: int = 24 * 3600
+    auto_create_schema: bool = False  # force create_all on non-SQLite (tests only); production uses Alembic
     live_model_enabled: bool = False  # hosted provider disabled unless explicitly configured
 
 

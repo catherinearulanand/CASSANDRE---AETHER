@@ -9,6 +9,7 @@ sys.path.insert(0, str(ROOT))
 _tmp = tempfile.mkdtemp(prefix="aether-test-")
 os.environ["AETHER_DATABASE_URL"] = os.environ.get("AETHER_TEST_DATABASE_URL") or f"sqlite:///{Path(_tmp, 't.db').as_posix()}"
 os.environ["AETHER_ENVIRONMENT"] = "test"
+os.environ["AETHER_AUTO_CREATE_SCHEMA"] = "true"  # tests build the schema from models; migrations are tested separately
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

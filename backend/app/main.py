@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.platform import router as platform_router
 from app.core.config import get_settings
 from app.core.errors import install_error_handlers
-from app.db.base import create_all, import_all_models
+from app.db.base import create_all, import_all_models, is_sqlite
 from app.engines import ENGINE_KEYS
 
 log = logging.getLogger("aether")
@@ -46,7 +46,11 @@ def create_app() -> FastAPI:
         return resp
 
     import_all_models()
-    create_all()
+    if is_sqlite() or st.auto_create_schema:
+        create_all()  # local/test convenience only
+    else:
+        from app.db.migrations import assert_schema_current
+        assert_schema_current()  # PostgreSQL: must be migrated with Alembic; fail visibly on mismatch
     app.include_router(platform_router, prefix="/api/v1")
     mounted: dict[str, bool] = {}
     for key in ENGINE_KEYS:
