@@ -1,0 +1,17 @@
+{
+  "_comment": "Hand-derived expectations for SENTINEL goldens. NOT imported by production code. Derivations in 'reasoning'.",
+  "G01_shortfall": {
+    "required_inr": "12500000", "posted_inr": "11500000", "shortfall_inr": "1000000", "expected_status": "FAIL",
+    "expected_cases": 1, "reasoning": "12,500,000 - 11,500,000 = 1,000,000 (ten lakh); eligible < required so gte is FALSE."
+  },
+  "G11_position_limit": {
+    "limit_lots": 100,
+    "rows": [
+      {"lots": "100", "classification": "CLIENT", "expected": "PASS", "why": "100 <= 100"},
+      {"lots": "101", "classification": "CLIENT", "expected": "FAIL", "why": "101 > 100", "gap": "1"},
+      {"lots": "100", "classification": null, "expected": "UNKNOWN", "why": "classification unknown => scope cannot be decided"}
+    ]
+  },
+  "G20_ifsc": {"required_usd": "2000000", "posted_usd": "2500000", "expected_status": "PASS", "domestic_control_status": "NOT_APPLICABLE"},
+  "SLA_hours": {"CRITICAL": 4, "HIGH": 24, "MEDIUM": 72, "LOW": 120}
+}
