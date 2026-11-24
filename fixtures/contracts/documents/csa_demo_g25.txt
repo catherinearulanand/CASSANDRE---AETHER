@@ -1,0 +1,28 @@
+FICTIONAL DEMO CREDIT SUPPORT ANNEX (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-DEMO-G25 to Master MA-DEMO-G25
+Party A: Meridian Demo Bank. Party B: Orchid Demo Counterparty.
+Base Currency: USD.
+Effective Date: 2026-01-01.
+
+Close-out netting applies across all Transactions under Master MA-DEMO-G25, which together form the netting set NS-DEMO-G25.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Meridian Demo Bank: USD 0.
+(b) Threshold with respect to Orchid Demo Counterparty: USD 0.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Meridian Demo Bank: USD 10.
+(b) Minimum Transfer Amount with respect to Orchid Demo Counterparty: USD 10.
+A transfer is required only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.
+
+Paragraph 3. Independent Amount.
+(a) Independent Amount with respect to Meridian Demo Bank: USD 0.
+(b) Independent Amount with respect to Orchid Demo Counterparty: USD 0.
+
+Paragraph 4. Rounding. Delivery Amounts and Return Amounts are rounded up to the nearest integral multiple of USD 1.
+
+Paragraph 5. Eligible Collateral.
+| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |
+| CASH | USD | ANY | 100% | 0% | 0% | none | none | none |
+
+Paragraph 6. Segregation. Initial Margin, if any, is held in segregated accounts.

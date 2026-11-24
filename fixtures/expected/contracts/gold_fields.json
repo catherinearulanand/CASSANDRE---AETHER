@@ -1,0 +1,43 @@
+{
+  "_note": "Hand-written independent expectations (A2). Never imported by production code. Percentages are percent numbers; amounts decimal strings.",
+  "CSA-MER-NWD-001": {
+    "threshold_a": {"amount": "10000000", "currency": "USD"},
+    "threshold_b": {"amount": "10000000", "currency": "USD"},
+    "mta_a": {"amount": "500000", "currency": "USD"},
+    "mta_b": {"amount": "500000", "currency": "USD"},
+    "independent_amount_a": {"amount": "0", "currency": "USD"},
+    "independent_amount_b": {"amount": "0", "currency": "USD"},
+    "rounding_increment": {"amount": "100000", "currency": "USD"},
+    "rounding_mode": "UP",
+    "mta_semantics": "GTE",
+    "segregated_im": true,
+    "valuation_agent": "A",
+    "eligible_schedule": [
+      {"asset_class": "CASH", "currency": "USD", "issuer_class": "ANY", "valuation_pct": "100", "haircut_pct": "0", "fx_haircut_pct": "0", "concentration_cap_pct": null, "cap_denominator": null, "min_rating": null, "max_maturity_years": null},
+      {"asset_class": "GOVERNMENT_BOND", "currency": "USD", "issuer_class": "SOVEREIGN", "valuation_pct": "94", "haircut_pct": "6", "fx_haircut_pct": "0", "concentration_cap_pct": "60", "cap_denominator": "OBLIGATION", "min_rating": "AA", "max_maturity_years": "10"},
+      {"asset_class": "GOVERNMENT_BOND", "currency": "INR", "issuer_class": "SOVEREIGN", "valuation_pct": "94", "haircut_pct": "6", "fx_haircut_pct": "8", "concentration_cap_pct": "50", "cap_denominator": "TOTAL_EFFECTIVE_ALLOCATED", "min_rating": null, "max_maturity_years": "10"},
+      {"asset_class": "CORPORATE_BOND", "currency": "USD", "issuer_class": "CORPORATE", "valuation_pct": "85", "haircut_pct": "15", "fx_haircut_pct": "0", "concentration_cap_pct": "20", "cap_denominator": "OBLIGATION", "min_rating": "A", "max_maturity_years": "5"}
+    ]
+  },
+  "MA-MER-NWD-001": {"netting_authorization": true},
+  "AMD-001 to CSA-MER-NWD-001": {
+    "threshold_a": {"amount": "8000000", "currency": "USD"},
+    "threshold_b": {"amount": "8000000", "currency": "USD"}
+  },
+  "resolutions": {
+    "NS-MER-NWD-001": [
+      {"as_of": "2026-08-17T04:00:00Z", "threshold_a": "10000000", "threshold_b": "10000000", "mta_a": "500000", "ia_a": "0", "rounding_increment": "100000", "rounding_mode": "UP", "mta_semantics": "GTE", "note": "G02/G03/G04 and G08 'before'"},
+      {"as_of": "2026-08-31T23:59:59Z", "threshold_a": "10000000", "note": "one second before the amendment boundary"},
+      {"as_of": "2026-09-01T00:00:00Z", "threshold_a": "8000000", "threshold_b": "8000000", "note": "exactly at effective_from: amendment applies (inclusive boundary)"}
+    ],
+    "NS-DEMO-G25": [{"as_of": "2026-08-17T04:00:00Z", "threshold_a": "0", "mta_a": "10", "ia_a": "0", "rounding_increment": "1", "rounding_mode": "UP"}],
+    "NS-DEMO-G14-RATING": [
+      {"as_of": "2026-08-17T04:00:00Z", "fact_snapshot_id": "FACT-RATING-BBB", "threshold_b": "10000000", "note": "BBB is not below BBB-"},
+      {"as_of": "2026-08-17T04:00:00Z", "fact_snapshot_id": "FACT-RATING-BB", "threshold_b": "0", "note": "BB is below BBB-: trigger fires"}
+    ]
+  },
+  "blocked": {
+    "NS-DEMO-G14-NOMTA": ["MISSING_REQUIRED_FIELD:mta_a", "MISSING_REQUIRED_FIELD:mta_b"],
+    "NS-DEMO-G14-RATING": ["UNRESOLVED_CONDITIONAL_FACT:threshold_b"]
+  }
+}

@@ -1,0 +1,29 @@
+FICTIONAL DEMO CREDIT SUPPORT ANNEX (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-MER-OTH-002 to Master MA-MER-OTH-002
+Party A: Meridian Demo Bank. Party B: Orchid Demo Counterparty.
+Base Currency: USD.
+Effective Date: 2026-01-01.
+
+Close-out netting applies across all Transactions under Master MA-MER-OTH-002, which together form the netting set NS-MER-OTH-002.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Meridian Demo Bank: USD 10,000,000.
+(b) Threshold with respect to Orchid Demo Counterparty: USD 10,000,000.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Meridian Demo Bank: USD 500,000.
+(b) Minimum Transfer Amount with respect to Orchid Demo Counterparty: USD 500,000.
+A transfer is required only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.
+
+Paragraph 3. Independent Amount.
+(a) Independent Amount with respect to Meridian Demo Bank: USD 0.
+(b) Independent Amount with respect to Orchid Demo Counterparty: USD 0.
+
+Paragraph 4. Rounding. Delivery Amounts and Return Amounts are rounded up to the nearest integral multiple of USD 100,000.
+
+Paragraph 5. Eligible Collateral.
+| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |
+| CASH | USD | ANY | 100% | 0% | 0% | none | none | none |
+| GOVERNMENT_BOND | USD | SOVEREIGN | 94% | 6% | 0% | 60% of obligation | AA | 10 |
+
+Paragraph 6. Segregation. Initial Margin, if any, is held in segregated accounts.

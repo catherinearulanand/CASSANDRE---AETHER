@@ -1,0 +1,9 @@
+FICTIONAL DEMO AMENDMENT NO. 1 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: AMD-001 to CSA-MER-NWD-001
+Party A: Meridian Demo Bank. Party B: Northwind Demo Clearing.
+Effective Date: 2026-09-01.
+
+This Amendment replaces Paragraph 1 of the Credit Support Annex with effect from the Effective Date.
+(a) Threshold with respect to Meridian Demo Bank: USD 8,000,000.
+(b) Threshold with respect to Northwind Demo Clearing: USD 8,000,000.
+All other terms remain unchanged.

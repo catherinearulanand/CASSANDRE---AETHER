@@ -1,0 +1,7 @@
+FICTIONAL DEMO MASTER DERIVATIVES AGREEMENT (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: MA-MER-NWD-001
+Party A: Meridian Demo Bank. Party B: Northwind Demo Clearing.
+Governing Law: Fictional Demo Law (synthetic).
+Effective Date: 2026-01-01.
+
+Section 6. Close-out Netting. Close-out netting applies across all Transactions under this Master Agreement, which together form the netting set NS-MER-NWD-001.

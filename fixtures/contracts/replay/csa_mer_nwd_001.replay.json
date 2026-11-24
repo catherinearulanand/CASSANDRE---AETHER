@@ -1,0 +1,186 @@
+{
+ "doc_ref": "CSA-MER-NWD-001",
+ "doc_sha256": "ffd25c470d73f9370446ef2a2e43763725fbba60a746da5ca0b45adde90cd51d",
+ "mode": "REPLAY",
+ "labelled_by": "hand (A2 worker)",
+ "proposals": [
+  {
+   "field_key": "threshold_a",
+   "direction": "A",
+   "value": {
+    "amount": "10000000",
+    "currency": "USD"
+   },
+   "quote": "Threshold with respect to Meridian Demo Bank: USD 10,000,000.",
+   "start": 263,
+   "end": 324,
+   "condition": null
+  },
+  {
+   "field_key": "threshold_b",
+   "direction": "B",
+   "value": {
+    "amount": "10000000",
+    "currency": "USD"
+   },
+   "quote": "Threshold with respect to Northwind Demo Clearing: USD 10,000,000.",
+   "start": 329,
+   "end": 395,
+   "condition": null
+  },
+  {
+   "field_key": "mta_a",
+   "direction": "A",
+   "value": {
+    "amount": "500000",
+    "currency": "USD"
+   },
+   "quote": "Minimum Transfer Amount with respect to Meridian Demo Bank: USD 500,000.",
+   "start": 439,
+   "end": 511,
+   "condition": null
+  },
+  {
+   "field_key": "mta_b",
+   "direction": "B",
+   "value": {
+    "amount": "500000",
+    "currency": "USD"
+   },
+   "quote": "Minimum Transfer Amount with respect to Northwind Demo Clearing: USD 500,000.",
+   "start": 516,
+   "end": 593,
+   "condition": null
+  },
+  {
+   "field_key": "independent_amount_a",
+   "direction": "A",
+   "value": {
+    "amount": "0",
+    "currency": "USD"
+   },
+   "quote": "Independent Amount with respect to Meridian Demo Bank: USD 0.",
+   "start": 741,
+   "end": 802,
+   "condition": null
+  },
+  {
+   "field_key": "independent_amount_b",
+   "direction": "B",
+   "value": {
+    "amount": "0",
+    "currency": "USD"
+   },
+   "quote": "Independent Amount with respect to Northwind Demo Clearing: USD 0.",
+   "start": 807,
+   "end": 873,
+   "condition": null
+  },
+  {
+   "field_key": "rounding_mode",
+   "direction": null,
+   "value": "UP",
+   "quote": "rounded up to the nearest integral multiple of USD 100,000.",
+   "start": 938,
+   "end": 997,
+   "condition": null
+  },
+  {
+   "field_key": "rounding_increment",
+   "direction": null,
+   "value": {
+    "amount": "100000",
+    "currency": "USD"
+   },
+   "quote": "rounded up to the nearest integral multiple of USD 100,000.",
+   "start": 938,
+   "end": 997,
+   "condition": null
+  },
+  {
+   "field_key": "mta_semantics",
+   "direction": null,
+   "value": "GTE",
+   "quote": "only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.",
+   "start": 617,
+   "end": 702,
+   "condition": null
+  },
+  {
+   "field_key": "segregated_im",
+   "direction": null,
+   "value": true,
+   "quote": "Initial Margin, if any, is held in segregated accounts.",
+   "start": 1500,
+   "end": 1555,
+   "condition": null
+  },
+  {
+   "field_key": "valuation_agent",
+   "direction": null,
+   "value": "A",
+   "quote": "The Valuation Agent is Meridian Demo Bank.",
+   "start": 1586,
+   "end": 1628,
+   "condition": null
+  },
+  {
+   "field_key": "eligible_schedule",
+   "direction": null,
+   "value": [
+    {
+     "asset_class": "CASH",
+     "currency": "USD",
+     "issuer_class": "ANY",
+     "valuation_pct": "100",
+     "haircut_pct": "0",
+     "fx_haircut_pct": "0",
+     "concentration_cap_pct": null,
+     "cap_denominator": null,
+     "min_rating": null,
+     "max_maturity_years": null
+    },
+    {
+     "asset_class": "GOVERNMENT_BOND",
+     "currency": "USD",
+     "issuer_class": "SOVEREIGN",
+     "valuation_pct": "94",
+     "haircut_pct": "6",
+     "fx_haircut_pct": "0",
+     "concentration_cap_pct": "60",
+     "cap_denominator": "OBLIGATION",
+     "min_rating": "AA",
+     "max_maturity_years": "10"
+    },
+    {
+     "asset_class": "GOVERNMENT_BOND",
+     "currency": "INR",
+     "issuer_class": "SOVEREIGN",
+     "valuation_pct": "94",
+     "haircut_pct": "6",
+     "fx_haircut_pct": "8",
+     "concentration_cap_pct": "50",
+     "cap_denominator": "TOTAL_EFFECTIVE_ALLOCATED",
+     "min_rating": null,
+     "max_maturity_years": "10"
+    },
+    {
+     "asset_class": "CORPORATE_BOND",
+     "currency": "USD",
+     "issuer_class": "CORPORATE",
+     "valuation_pct": "85",
+     "haircut_pct": "15",
+     "fx_haircut_pct": "0",
+     "concentration_cap_pct": "20",
+     "cap_denominator": "OBLIGATION",
+     "min_rating": "A",
+     "max_maturity_years": "5"
+    }
+   ],
+   "quote": "| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |\n| CASH | USD | ANY | 100% | 0% | 0% | none | none | none |\n| GOVERNMENT_BOND | USD | SOVEREIGN | 94% | 6% | 0% | 60% of obligation | AA | 10 |\n| GOVERNMENT_BOND | INR | SOVEREIGN | 94% | 6% | 8% | 50% of total allocated | none | 10 |\n| CORPORATE_BOND | USD | CORPORATE | 85% | 15% | 0% | 20% of obligation | A | 5 |",
+   "start": 1033,
+   "end": 1472,
+   "condition": null
+  }
+ ]
+}

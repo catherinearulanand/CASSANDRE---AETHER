@@ -1,0 +1,25 @@
+{
+ "doc_ref": "AMD-001 to CSA-MER-NWD-001",
+ "file": "amendment_001_csa_mer_nwd_001.txt",
+ "labelled_by": "hand (A2 worker)",
+ "proposals": [
+  {
+   "field_key": "threshold_a",
+   "direction": "A",
+   "value": {
+    "amount": "8000000",
+    "currency": "USD"
+   },
+   "quote": "Threshold with respect to Meridian Demo Bank: USD 8,000,000."
+  },
+  {
+   "field_key": "threshold_b",
+   "direction": "B",
+   "value": {
+    "amount": "8000000",
+    "currency": "USD"
+   },
+   "quote": "Threshold with respect to Northwind Demo Clearing: USD 8,000,000."
+  }
+ ]
+}

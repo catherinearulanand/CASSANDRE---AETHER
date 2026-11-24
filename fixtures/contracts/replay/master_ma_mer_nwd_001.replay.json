@@ -1,0 +1,18 @@
+{
+ "doc_ref": "MA-MER-NWD-001",
+ "doc_sha256": "7ce21c2acd1ec4c8b9305677bf0de8f17661ca5359e9f5a659e421d5df258e66",
+ "mode": "REPLAY",
+ "labelled_by": "hand (A2 worker)",
+ "proposals": [
+  {
+   "field_key": "netting_authorization",
+   "direction": null,
+   "value": true,
+   "unit": "NS-MER-NWD-001",
+   "quote": "Close-out netting applies across all Transactions under this Master Agreement, which together form the netting set NS-MER-NWD-001.",
+   "start": 274,
+   "end": 404,
+   "condition": null
+  }
+ ]
+}
