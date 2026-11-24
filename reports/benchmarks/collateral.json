@@ -1,0 +1,100 @@
+{
+  "engine": "ATLAS collateral",
+  "target": "p95 < 2 s for 1,000 eligible continuous lots (solver + independent feasibility)",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 140 Stepping 2, GenuineIntel",
+    "cpu_count": 8,
+    "ram_gb": null,
+    "python": "3.14.3",
+    "scipy": "1.18.0",
+    "numpy": "2.4.3",
+    "solver": {
+      "solver": "HiGHS",
+      "highs_version": "1.15.1",
+      "scipy_version": "1.18.0",
+      "numpy_version": "2.4.3",
+      "feasibility_tolerance": 1e-07,
+      "tie_break_tolerance": 1e-12
+    },
+    "db": "sqlite (WAL)",
+    "network": "none",
+    "commit": "d1e94a9d9759ed705814b2e942ac3e29b3f0474e",
+    "uncommitted_changes_possible": true
+  },
+  "data": {
+    "tier": "DEMO-like single pool",
+    "lots_total": 1000,
+    "eligible_lots": 1000,
+    "seed": 42,
+    "required_coverage": "26967829",
+    "caps": 121,
+    "generator": "scripts/bench_collateral.py gen_lots"
+  },
+  "method": {
+    "warmups": 5,
+    "measured_reps": 30,
+    "cold": "5 fresh subprocesses, first call each",
+    "concurrency": 1
+  },
+  "results": {
+    "pipeline_warm (solve+round+verify+baseline)": {
+      "n": 30,
+      "p50_s": 0.278,
+      "p95_s": 0.364,
+      "p99_s": 0.3991,
+      "mean_s": 0.2746,
+      "min_s": 0.2006,
+      "max_s": 0.4115
+    },
+    "solver_only_warm": {
+      "n": 30,
+      "p50_s": 0.2287,
+      "p95_s": 0.2721,
+      "p99_s": 0.2913,
+      "mean_s": 0.2221,
+      "min_s": 0.1653,
+      "max_s": 0.2975
+    },
+    "service_optimise_end_to_end_warm (DB+eligibility+pipeline+persist+evidence)": {
+      "n": 30,
+      "p50_s": 0.5956,
+      "p95_s": 1.2054,
+      "p99_s": 1.4019,
+      "mean_s": 0.6421,
+      "min_s": 0.3243,
+      "max_s": 1.4647
+    },
+    "pipeline_cold_s": [
+      0.4887,
+      0.5663,
+      0.2499,
+      0.2402,
+      0.2449
+    ],
+    "cold_incl_import_and_setup_s": [
+      4.3656,
+      4.415,
+      1.9923,
+      1.9349,
+      1.8419
+    ]
+  },
+  "failures": {
+    "pipeline_failures_or_unverified": 0,
+    "service_outcomes": [
+      [
+        "optimal",
+        "CHECKED"
+      ]
+    ]
+  },
+  "target_met": {
+    "pipeline_warm_p95_lt_2s": true,
+    "service_warm_p95_lt_2s": true
+  },
+  "notes": [
+    "Engineering target, not an SLA; numbers apply to this machine/run only.",
+    "Failed or slow measurements are retained in the aggregates, not discarded."
+  ]
+}

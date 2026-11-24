@@ -1,0 +1,136 @@
+{
+  "as_of": "2026-08-17T04:00:00Z",
+  "currency": "USD",
+  "lots": [
+    {
+      "annual_cost_rate": null,
+      "asset_class": "CASH",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [],
+      "fx_to_target": null,
+      "issuer": null,
+      "issuer_class": null,
+      "issuer_group": null,
+      "lot_id": "POST-CASH-USD",
+      "lot_size": "0",
+      "maturity_date": null,
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": "ACC-DEMO-IFSC-001",
+      "posted_units": "1000000",
+      "price": "1",
+      "rating": null,
+      "reuse_permission": false,
+      "settlement_lag_days": 0,
+      "txn_cost_per_unit": "0",
+      "units": "0"
+    },
+    {
+      "annual_cost_rate": "0.040",
+      "asset_class": "CASH",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "ACC-DEMO-IFSC-001"
+      ],
+      "fx_to_target": null,
+      "issuer": null,
+      "issuer_class": null,
+      "issuer_group": null,
+      "lot_id": "CASH-USD-01",
+      "lot_size": "0",
+      "maturity_date": null,
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "1",
+      "rating": null,
+      "reuse_permission": false,
+      "settlement_lag_days": 0,
+      "txn_cost_per_unit": "0",
+      "units": "2000000"
+    },
+    {
+      "annual_cost_rate": "0.050",
+      "asset_class": "GSEC",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "ACC-DEMO-IFSC-001"
+      ],
+      "fx_to_target": null,
+      "issuer": "Demo Treasury",
+      "issuer_class": null,
+      "issuer_group": "IG-UST",
+      "lot_id": "UST-USD-01",
+      "lot_size": "0",
+      "maturity_date": "2030-05-01",
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "100",
+      "rating": "AAA",
+      "reuse_permission": false,
+      "settlement_lag_days": 1,
+      "txn_cost_per_unit": "0",
+      "units": "10000"
+    },
+    {
+      "annual_cost_rate": "0.020",
+      "asset_class": "CASH",
+      "currency": "INR",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "ACC-DEMO-IFSC-001"
+      ],
+      "fx_to_target": "0.012",
+      "issuer": null,
+      "issuer_class": null,
+      "issuer_group": null,
+      "lot_id": "CASH-INR-X",
+      "lot_size": "0",
+      "maturity_date": null,
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "1",
+      "rating": null,
+      "reuse_permission": false,
+      "settlement_lag_days": 0,
+      "txn_cost_per_unit": "0",
+      "units": "50000000"
+    }
+  ],
+  "market_type": "ETD_IFSC",
+  "policy": {
+    "note": "SYNTHETIC IFSC USD posting policy; independent of the domestic INR policy",
+    "schedule": [
+      {
+        "asset_class": "CASH",
+        "currency": "USD",
+        "haircut_pct": "0",
+        "valuation_pct": "100"
+      },
+      {
+        "asset_class": "GSEC",
+        "currency": "USD",
+        "haircut_pct": "5",
+        "min_rating": "AA",
+        "valuation_pct": "95"
+      },
+      {
+        "asset_class": "CASH",
+        "currency": "INR",
+        "haircut_pct": "0",
+        "valuation_pct": "100"
+      }
+    ]
+  },
+  "snapshot_id": "INV-IFSC-001",
+  "source_ref": "synthetic:collateral-fixtures/1.0",
+  "wrong_way_issuer_groups": []
+}

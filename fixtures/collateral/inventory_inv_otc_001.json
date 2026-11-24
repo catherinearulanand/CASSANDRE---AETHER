@@ -1,0 +1,117 @@
+{
+  "as_of": "2026-08-17T04:00:00Z",
+  "currency": "USD",
+  "lots": [
+    {
+      "annual_cost_rate": "0.050",
+      "asset_class": "CASH",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "NS-MER-NWD-001"
+      ],
+      "fx_to_target": null,
+      "issuer": null,
+      "issuer_class": null,
+      "issuer_group": null,
+      "lot_id": "CASH-USD-OTC",
+      "lot_size": "0",
+      "maturity_date": null,
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "1",
+      "rating": null,
+      "reuse_permission": false,
+      "settlement_lag_days": 0,
+      "txn_cost_per_unit": "0",
+      "units": "6000000"
+    },
+    {
+      "annual_cost_rate": "0.045",
+      "asset_class": "GSEC",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "NS-MER-NWD-001"
+      ],
+      "fx_to_target": null,
+      "issuer": "Demo Treasury",
+      "issuer_class": null,
+      "issuer_group": "IG-UST",
+      "lot_id": "GSEC-USD-OTC",
+      "lot_size": "0",
+      "maturity_date": "2030-05-01",
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "100",
+      "rating": "AAA",
+      "reuse_permission": false,
+      "settlement_lag_days": 1,
+      "txn_cost_per_unit": "0",
+      "units": "100000"
+    },
+    {
+      "annual_cost_rate": "0.060",
+      "asset_class": "CORP",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "NS-MER-NWD-001"
+      ],
+      "fx_to_target": null,
+      "issuer": "Demo Corp Delta",
+      "issuer_class": "CORPORATE",
+      "issuer_group": "IG-DELTA",
+      "lot_id": "CORP-USD-OTC",
+      "lot_size": "0",
+      "maturity_date": "2028-01-31",
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "100",
+      "rating": "A",
+      "reuse_permission": false,
+      "settlement_lag_days": 1,
+      "txn_cost_per_unit": "0",
+      "units": "30000"
+    },
+    {
+      "annual_cost_rate": "0.020",
+      "asset_class": "CORP",
+      "currency": "USD",
+      "custodian": "Demo Custodian (synthetic)",
+      "custody_account": "CUST-DEMO-01",
+      "entitled_to": [
+        "NS-MER-NWD-001"
+      ],
+      "fx_to_target": null,
+      "issuer": "Northwind Demo Finance",
+      "issuer_class": "CORPORATE",
+      "issuer_group": "IG-NORTHWIND",
+      "lot_id": "CORP-USD-WW",
+      "lot_size": "0",
+      "maturity_date": "2028-01-31",
+      "owner_entity": "ENT-MERIDIAN",
+      "posted_account_id": null,
+      "posted_units": "0",
+      "price": "100",
+      "rating": "A",
+      "reuse_permission": false,
+      "settlement_lag_days": 1,
+      "txn_cost_per_unit": "0",
+      "units": "30000"
+    }
+  ],
+  "market_type": "OTC",
+  "policy": {},
+  "snapshot_id": "INV-OTC-001",
+  "source_ref": "synthetic:collateral-fixtures/1.0",
+  "wrong_way_issuer_groups": [
+    "IG-NORTHWIND"
+  ]
+}

@@ -1,0 +1,31 @@
+{
+  "generator": "aether-collateral-fixtures/1.0",
+  "random_seed": null,
+  "note": "fully deterministic, no randomness",
+  "as_of": "2026-08-17T04:00:00Z",
+  "provenance": "SYNTHETIC",
+  "licence": "synthetic, no third-party data",
+  "files": [
+    {
+      "file": "inventory_inv_etd_001.json",
+      "snapshot_id": "INV-ETD-001",
+      "rows": 13,
+      "sha256": "b7132a9a6b6e7406655f094f128bffaeb0574439eed1f6c28fe3e2750f623823",
+      "schema_version": "1"
+    },
+    {
+      "file": "inventory_inv_ifsc_001.json",
+      "snapshot_id": "INV-IFSC-001",
+      "rows": 4,
+      "sha256": "31d27c2af82e1155e6924ded218e5b0775c700193d406759f3795fc1ea717e6e",
+      "schema_version": "1"
+    },
+    {
+      "file": "inventory_inv_otc_001.json",
+      "snapshot_id": "INV-OTC-001",
+      "rows": 4,
+      "sha256": "0ab244ed94fa68e6423a25039f028ab863e02c79cf7ba5f5cdcdfd521cfab141",
+      "schema_version": "1"
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "_comment": "Independent hand-derived expectations for ATLAS golden cases. Not imported by production code. Derivations are in `derivation` fields.",
+  "G05": {"required": "100", "legs": {"A": "60", "B": "40"}, "optimal_cost": "180", "all_B_cost": "300", "savings_pct": "40",
+          "derivation": "A cost 1/unit avail 60, B cost 3/unit avail 100, factor 1: 60*1 + 40*3 = 180; B-only = 300; (300-180)/300 = 40%"},
+  "G06": {"effective_per_unit": "86.48", "derivation": "100 * 0.94 * 0.92 = 86.48", "required": "8648", "quantity": "100"},
+  "G07": {"required": "100", "eligible_max_coverage": "80", "remaining": "20", "state": "INFEASIBLE"},
+  "G13": {"available": "100", "request_each": "80", "successes": 1, "conflicts": 1},
+  "G01_allocation": {
+    "required_total_inr": "12500000", "posted_inr": "11500000", "needed_inr": "1000000", "horizon_days": 30,
+    "selected_lot": "GSEC-INR-01",
+    "objective_inr": "5936.073059", "objective_tolerance": "0.001",
+    "derivation": "GSEC-INR-01: price 100, valuation 0.90 => e=90; cost/unit = 100*0.065*30/365 = 0.5342465753; cost per effective unit = 0.005936073; * 1,000,000 = 5,936.073059",
+    "baseline_B1_cash_only_cost_inr": "7808.219178",
+    "baseline_derivation": "cash e=1, cost/unit = 1*0.095*30/365 = 0.0078082192; * 1,000,000 = 7,808.219178",
+    "excluded": {"CORP-INR-WW": "WRONG_WAY_RISK", "CORP-INR-UNRATED": "UNKNOWN_RATING", "GOLDETF-INR-01": "NO_SCHEDULE_MATCH:CLEARING_POLICY",
+                 "GSEC-INR-LATE": "SETTLEMENT_AFTER_DEADLINE", "GSEC-INR-OTHERACC": "NO_ENTITLEMENT", "GSEC-INR-NOPRICE": "UNKNOWN_PRICE"}
+  },
+  "G01_posted_coverage": {"cash": "5000000", "gsec_a": "50000*100*0.90 = 4500000", "corp_b": "25000*100*0.80 = 2000000", "total": "11500000"},
+  "IFSC_cash_optimal": {"required_total_usd": "1500000", "posted_usd": "1000000", "needed_usd": "500000",
+                        "derivation": "cash cost/cov = 0.04*h/365; UST = 0.05*h/365/0.95 (larger) => all cash, equals cash-only baseline: no improvement",
+                        "savings_absolute": "0"},
+  "OTC_G03_call": {"required_usd": "9500000", "schedule": "GSEC valuation 98%, cost 0.045 => per cov 0.045/0.98 < cash 0.05", "selected_lot": "GSEC-USD-OTC"}
+}
