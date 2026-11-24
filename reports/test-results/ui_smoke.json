@@ -1,0 +1,362 @@
+[
+ {
+  "viewport": "desktop1440",
+  "route": "/overview",
+  "h1": "Overview",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/regulatory",
+  "h1": "Regulatory Intelligence (REGULUS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/contracts",
+  "h1": "Contract Intelligence (COVENANT)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/risk",
+  "h1": "Risk & Margin (VECTOR)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/collateral",
+  "h1": "Collateral & Liquidity (ATLAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/compliance",
+  "h1": "Compliance & Surveillance (SENTINEL)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/evidence",
+  "h1": "Evidence & Audit (VERITAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/scenarios",
+  "h1": "Scenario Lab",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/methodology",
+  "h1": "Methodology and limitations",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "desktop1440",
+  "route": "/about",
+  "h1": "About / Provenance",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/overview",
+  "h1": "Overview",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/regulatory",
+  "h1": "Regulatory Intelligence (REGULUS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/contracts",
+  "h1": "Contract Intelligence (COVENANT)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/risk",
+  "h1": "Risk & Margin (VECTOR)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/collateral",
+  "h1": "Collateral & Liquidity (ATLAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/compliance",
+  "h1": "Compliance & Surveillance (SENTINEL)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/evidence",
+  "h1": "Evidence & Audit (VERITAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/scenarios",
+  "h1": "Scenario Lab",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/methodology",
+  "h1": "Methodology and limitations",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "laptop1280",
+  "route": "/about",
+  "h1": "About / Provenance",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/overview",
+  "h1": "Overview",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/regulatory",
+  "h1": "Regulatory Intelligence (REGULUS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/contracts",
+  "h1": "Contract Intelligence (COVENANT)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/risk",
+  "h1": "Risk & Margin (VECTOR)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/collateral",
+  "h1": "Collateral & Liquidity (ATLAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/compliance",
+  "h1": "Compliance & Surveillance (SENTINEL)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/evidence",
+  "h1": "Evidence & Audit (VERITAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/scenarios",
+  "h1": "Scenario Lab",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/methodology",
+  "h1": "Methodology and limitations",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "tablet768",
+  "route": "/about",
+  "h1": "About / Provenance",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/overview",
+  "h1": "Overview",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/regulatory",
+  "h1": "Regulatory Intelligence (REGULUS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/contracts",
+  "h1": "Contract Intelligence (COVENANT)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/risk",
+  "h1": "Risk & Margin (VECTOR)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/collateral",
+  "h1": "Collateral & Liquidity (ATLAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/compliance",
+  "h1": "Compliance & Surveillance (SENTINEL)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/evidence",
+  "h1": "Evidence & Audit (VERITAS)",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/scenarios",
+  "h1": "Scenario Lab",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/methodology",
+  "h1": "Methodology and limitations",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ },
+ {
+  "viewport": "mobile390",
+  "route": "/about",
+  "h1": "About / Provenance",
+  "horizontal_overflow": false,
+  "not_built_banner": false,
+  "console_errors": [],
+  "failed_api": []
+ }
+]

@@ -75,9 +75,9 @@ function Frame({ children }: { children: ReactNode }) {
         <select id="market" value={market} onChange={e => setMarket(e.target.value as Market)} style={{ width: 200 }}>
           {MARKETS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <span className="mono muted" title="Pinned scenario as-of (not the browser clock)">as-of {asOf} UTC</span>
+        <span className="mono muted asof" title="Pinned scenario as-of (not the browser clock)">as-of {asOf} UTC</span>
         <span className="spacer" />
-        <span className="muted">{principal.tenant_id} · {principal.display_name} · <span className="mono">{principal.roles.join(",")}</span></span>
+        <span className="muted who">{principal.tenant_id} · {principal.display_name} · <span className="mono">{principal.roles.join(",")}</span></span>
         <button onClick={() => signOut()}>Sign out</button>
       </header>
       <main className="main">{children}</main>

@@ -23,7 +23,7 @@ h3 { font-size: 13px; font-weight: 600; margin: 0 0 var(--s2); color: var(--text
 .num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .muted { color: var(--text-2); } .faint { color: var(--text-3); }
 
-.shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: auto 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: auto auto 1fr; min-height: 100vh; }
 .banner { grid-column: 1 / -1; background: #2a2412; color: var(--warn); border-bottom: 1px solid #5c4a1c; padding: 6px var(--s4); font-size: 12px; font-weight: 600; }
 .topbar { grid-column: 2; display: flex; align-items: center; gap: var(--s4); height: var(--topbar-h); padding: 0 var(--s4); background: var(--panel); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 5; }
 .sidebar { grid-row: 2 / span 2; grid-column: 1; background: var(--panel); border-right: 1px solid var(--border); padding: var(--s4) var(--s2); }
@@ -36,7 +36,7 @@ h3 { font-size: 13px; font-weight: 600; margin: 0 0 var(--s2); color: var(--text
 .nav .tag { margin-left: auto; font-size: 10px; color: var(--warn); }
 .menu-btn { display: none; }
 
-.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s4); }
+.card { min-width: 0; overflow-x: auto; background: var(--panel); border: 1px solid var(--border); border-radius: var(--r-lg); padding: var(--s4); }
 .grid { display: grid; gap: var(--s4); } .grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); } .grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .metric .label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
 .metric .value { font-family: var(--mono); font-size: 22px; margin-top: var(--s1); }
@@ -69,4 +69,8 @@ label { display: block; font-size: 12px; color: var(--text-2); margin-bottom: 4p
   .menu-btn { display: inline-flex; align-items: center; min-width: 44px; min-height: 44px; }
   .grid.c4, .grid.c3, .grid.c2 { grid-template-columns: 1fr; }
   .main { padding: var(--s3); }
+  .topbar { height: auto; min-height: var(--topbar-h); flex-wrap: wrap; gap: var(--s2); padding: var(--s2) var(--s3); }
+  .topbar .asof { font-size: 11px; flex-basis: 100%; order: 5; }
+  .topbar .who { display: none; }
+  .topbar select { width: auto; flex: 1; min-width: 0; }
 }

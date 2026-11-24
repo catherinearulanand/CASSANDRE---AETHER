@@ -16,10 +16,12 @@ Latest full run: `cd backend; python -m pytest ../tests -q` -> **469 passed, 0 f
 | Cross-engine chain, real services, no fakes (tests/integration/test_full_chain.py) | VERIFIED | G02 (0 transfer), G03 (19,469,510.12 -> 9,469,510.12 -> 9,500,000 POST), G21 (stale snapshot blocked), G01 (10,000,000 -> 12,500,000 INR hypothetical; posted 11,500,000; shortfall 1,000,000 -> compliance FAIL with trace, exactly one case, no duplicate on repeat; collateral allocates for the 1,000,000 gap) |
 | Integration fix found by the chain test | FIXED | SENTINEL's coverage control pinned `DEMO-ETD-COVERAGE` v2, REGULUS seeds only v1 -> compliance returned UNKNOWN. Pin changed to v1 (60 compliance tests still pass) |
 | Seed | VERIFIED | `python backend/scripts/seed_demo.py` seeds users + all five engines' fixtures |
-| UI (six engines + shell) | BUILT, NOT VISUALLY VERIFIED | typecheck + production build only. No browser, Playwright, screenshots, contrast or mobile checks |
+| UI (six engines + shell), browser smoke | VERIFIED (smoke) | `python tests/e2e/ui_smoke.py` (Playwright + system Edge): 10 routes x 4 viewports (1440/1280/768/390) = 40 route-views, 0 horizontal overflow, 0 console errors, 0 failed API calls; results in `reports/test-results/ui_smoke.json`, screenshots in `reports/screenshots/`. First run found and I fixed: top-bar grid gap, mobile top-bar overflow, wide audit table overflowing at 768/1280 |
+| UI flow: Risk desk G01 hypothetical (browser -> API -> engine) | VERIFIED | `python tests/e2e/ui_flow_g01.py`: UI shows INR 12,500,000 and a HYPOTHETICAL marker |
+| UI: remaining flows (approvals, reservations, case workflow, exports, tamper demo), keyboard nav, screen reader, WCAG contrast | NOT VERIFIED | only smoke + one flow so far |
 | Alembic migrations | NOT STARTED | tables created via `create_all` |
 | PostgreSQL / Docker Compose | NOT VERIFIED | no PostgreSQL here, Docker daemon was down; row-lock paths never executed |
-| Playwright e2e, accessibility audit | NOT STARTED | |
+| Full Playwright scenario suite, accessibility audit | PARTIAL | two scripts above only; no axe/contrast audit |
 | E-A01 (all six engines emit evidence) | PARTIAL | regulatory, contracts, risk, collateral, compliance verified on the seeded flow; VERITAS audit events not asserted |
 | Replay (E-A05) end-to-end | NOT DEMONSTRATED | engines do not yet emit `payload.replay` / `payload.parents` |
 | Spec benchmarks (section 14) | PARTIAL | risk, collateral, evidence measured individually; no whole-pipeline or DEMO-tier (500/2,000/1,000) run; SCALE/STRESS not run |
