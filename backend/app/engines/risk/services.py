@@ -10,12 +10,14 @@ Results are immutable. BLOCKED results are stored (audit) but never served from 
 """
 from __future__ import annotations
 
+import contextvars
 import hashlib
 from datetime import date, datetime, timezone
 from decimal import ROUND_HALF_EVEN, Decimal, localcontext
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core import services
 from app.core.canonical import CanonicalError, canonical_bytes, content_hash
@@ -38,6 +40,11 @@ METHODS = {"OTC_VM_SIMPLE_V1": {OTC}, "ETD_IMPORTED_V1": {ETD_DOM, ETD_IFSC}}
 Q8 = Decimal("0.00000001")
 Q2 = Decimal("0.01")
 ACTOR_KEYS = ("actor_id", "actor_role", "correlation_id", "source_mode")
+ENGINE_VERSION = f"aether-risk/{METHOD_VERSION}"
+# Read-only replay pins (set only by replay_risk): bypass the result cache and pin the exact persisted inputs used originally.
+_REPLAY: contextvars.ContextVar[dict | None] = contextvars.ContextVar("risk_replay", default=None)
+# Fields excluded from the canonical BUSINESS hash: run identity, and float-based internal analytics (compared with a tolerance instead).
+BUSINESS_HASH_EXCLUDE = ("result_id", "result_hash", "internal_estimate")
 
 
 class _Block(Exception):
@@ -243,37 +250,75 @@ def import_portfolio(session, tenant_id: str, *, instruments=(), trades=(), posi
     if errs:
         raise ValidationFailed("Portfolio import rejected atomically (no partial import)", field_errors=errs)
     added = {"trades": 0, "instruments": 0, "positions": 0}
+    # Bulk existence checks (one query per chunk, not one per row): the per-row SELECT + autoflushed INSERT made a 2,000-row
+    # position import take 22-32 s on PostgreSQL. Semantics are unchanged: identical content is idempotent, changed content => 409.
+    CH = 500
+
+    def _chunks(xs):
+        xs = list(xs)
+        for k in range(0, len(xs), CH):
+            yield xs[k:k + CH]
+
+    ex_trades: dict[str, RiskTrade] = {}
+    for ids in _chunks(t["trade_id"] for t in trades):
+        ex_trades.update({r.trade_id: r for r in session.execute(select(RiskTrade).where(RiskTrade.tenant_id == tenant_id, RiskTrade.trade_id.in_(ids))).scalars()})
+    new_rows: list = []
     for t in trades:
         h = content_hash(t)
-        row = session.execute(select(RiskTrade).where(RiskTrade.tenant_id == tenant_id, RiskTrade.trade_id == t["trade_id"])).scalar_one_or_none()
+        row = ex_trades.get(t["trade_id"])
         if row:
             if row.content_hash != h:
                 raise Conflict(f"trade {t['trade_id']} exists with different terms; trades are immutable")
             continue
-        session.add(RiskTrade(tenant_id=tenant_id, trade_id=t["trade_id"], master_id=t["master_id"], netting_set_id=t.get("netting_set_id"),
-                              trade_type=t["type"], maturity=t["maturity"], payload=t, content_hash=h, source_ref="import"))
+        new_rows.append(RiskTrade(tenant_id=tenant_id, trade_id=t["trade_id"], master_id=t["master_id"], netting_set_id=t.get("netting_set_id"),
+                                  trade_type=t["type"], maturity=t["maturity"], payload=t, content_hash=h, source_ref="import"))
         added["trades"] += 1
+    ex_inst: dict[str, RiskInstrument] = {}
+    for ids in _chunks(x["instrument_id"] for x in instruments):
+        ex_inst.update({r.instrument_id: r for r in session.execute(select(RiskInstrument).where(RiskInstrument.tenant_id == tenant_id, RiskInstrument.instrument_id.in_(ids))).scalars()})
+    seen_inst: dict[str, str] = {}
     for x in instruments:
         h = content_hash(x)
-        row = session.execute(select(RiskInstrument).where(RiskInstrument.tenant_id == tenant_id, RiskInstrument.instrument_id == x["instrument_id"])).scalar_one_or_none()
+        row = ex_inst.get(x["instrument_id"])
         if row:
             if row.content_hash != h:
                 raise Conflict(f"instrument {x['instrument_id']} exists with different terms")
             continue
-        session.add(RiskInstrument(tenant_id=tenant_id, instrument_id=x["instrument_id"], venue=x["venue"], payload=x, content_hash=h))
+        if x["instrument_id"] in seen_inst:  # duplicate inside the batch
+            if seen_inst[x["instrument_id"]] != h:
+                raise Conflict(f"instrument {x['instrument_id']} appears twice in the batch with different terms")
+            continue
+        seen_inst[x["instrument_id"]] = h
+        new_rows.append(RiskInstrument(tenant_id=tenant_id, instrument_id=x["instrument_id"], venue=x["venue"], payload=x, content_hash=h))
         added["instruments"] += 1
-    for p in positions:
-        as_of, rev = _ts(p["as_of"]), int(p.get("revision", 1))
-        row = session.execute(select(RiskPosition).where(RiskPosition.tenant_id == tenant_id, RiskPosition.account_id == p["account_id"],
-                                                         RiskPosition.instrument_id == p["instrument_id"], RiskPosition.as_of == as_of,
-                                                         RiskPosition.revision == rev)).scalar_one_or_none()
+    ex_pos: dict[tuple, RiskPosition] = {}
+    groups: dict[tuple, list[str]] = {}
+    for p_ in positions:
+        groups.setdefault((p_["account_id"], _ts(p_["as_of"]), int(p_.get("revision", 1))), []).append(p_["instrument_id"])
+    for (acc, as_of_g, rev_g), ids in groups.items():
+        for chunk in _chunks(ids):
+            for r in session.execute(select(RiskPosition).where(RiskPosition.tenant_id == tenant_id, RiskPosition.account_id == acc, RiskPosition.as_of == as_of_g,
+                                                               RiskPosition.revision == rev_g, RiskPosition.instrument_id.in_(chunk))).scalars():
+                ex_pos[(r.account_id, r.instrument_id, r.as_of, r.revision)] = r
+    seen_pos: dict[tuple, tuple] = {}
+    for p_ in positions:
+        as_of, rev = _ts(p_["as_of"]), int(p_.get("revision", 1))
+        vals = (dstr(to_decimal(p_["signed_lots"])), dstr(to_decimal(p_["settlement_price"])))
+        key = (p_["account_id"], p_["instrument_id"], as_of, rev)
+        row = ex_pos.get(key)
         if row:
-            if (row.signed_lots, row.settlement_price) != (dstr(to_decimal(p["signed_lots"])), dstr(to_decimal(p["settlement_price"]))):
+            if (row.signed_lots, row.settlement_price) != vals:
                 raise Conflict("position revision exists with different values; supply a new revision")
             continue
-        session.add(RiskPosition(tenant_id=tenant_id, account_id=p["account_id"], instrument_id=p["instrument_id"], as_of=as_of, revision=rev,
-                                 signed_lots=dstr(to_decimal(p["signed_lots"])), settlement_price=dstr(to_decimal(p["settlement_price"]))))
+        if key in seen_pos:  # duplicate inside the batch
+            if seen_pos[key] != vals:
+                raise Conflict("position appears twice in the batch with different values; supply a new revision")
+            continue
+        seen_pos[key] = vals
+        new_rows.append(RiskPosition(tenant_id=tenant_id, account_id=p_["account_id"], instrument_id=p_["instrument_id"], as_of=as_of, revision=rev,
+                                     signed_lots=vals[0], settlement_price=vals[1]))
         added["positions"] += 1
+    session.add_all(new_rows)  # one flush below: batched INSERTs
     session.flush()
     h = content_hash({"trades": sorted(t["trade_id"] for t in trades), "instruments": sorted(x["instrument_id"] for x in instruments), "n_pos": len(positions)})
     if any(added.values()):
@@ -336,7 +381,9 @@ def _latest_file(session, tenant_id: str, account_id: str, file_id: str | None, 
         q = q.where(RiskClearingFile.file_id == file_id)
     if revision:
         q = q.where(RiskClearingFile.revision == revision)
-    return session.execute(q.order_by(RiskClearingFile.as_of.desc(), RiskClearingFile.revision.desc())).scalars().first()
+    # deterministic: business date, then revision, then most recent import, then id (two files for one account/date never tie arbitrarily)
+    return session.execute(q.order_by(RiskClearingFile.as_of.desc(), RiskClearingFile.revision.desc(), RiskClearingFile.created_at.desc(),
+                                      RiskClearingFile.file_id.desc())).scalars().first()
 
 
 def reconcile_clearing(session, tenant_id: str, file_id: str, snapshot_id: str | None = None, ctx: dict | None = None) -> dict:
@@ -384,6 +431,8 @@ def _positions(session, tenant_id: str, account_id: str, as_of: datetime) -> lis
 
 # --------------------------------------------------------------------------- compute_margin
 def _cache_lookup(session, tenant_id: str, key: str) -> None:
+    if (_REPLAY.get() or {}).get("no_cache"):
+        return
     r = session.execute(select(RiskResult).where(RiskResult.tenant_id == tenant_id, RiskResult.cache_key == key,
                                                  RiskResult.status.in_(("OK", "UNSUPPORTED"))).limit(1)).scalar_one_or_none()
     if r is not None:
@@ -394,7 +443,7 @@ def _shell(market: str, ctx: dict, snapshot_id, terms_hash, rule_set_hash, metho
     return {"result_id": None, "market_type": market, "status": "OK", "blocking_reasons": [], "currency": None,
             "account_id": ctx.get("account_id"), "netting_set_id": ctx.get("netting_set_id"), "as_of": as_of_s,
             "exposure": None, "required_amount": None, "direction": "NONE", "unrounded_amount": None, "rounded_amount": None,
-            "components": [], "waterfall": [], "input_hashes": [], "snapshot_id": snapshot_id, "terms_hash": terms_hash,
+            "components": [], "waterfall": [], "input_hashes": [], "snapshot_id": snapshot_id, "snapshot_as_of": None, "terms_hash": terms_hash,
             "rule_set_hash": rule_set_hash, "method": methodology, "method_version": METHOD_VERSION, "hypothetical": False,
             "provenance_flags": ["SYNTHETIC"], "warnings": [], "quality": {}, "trade_valuations": [], "netting": None,
             "terms_used": None, "context_used": None, "internal_estimate": None, "result_hash": None}
@@ -404,8 +453,9 @@ _KEYS_FOR_CACHE = ("market_type", "netting_set_id", "account_id", "venue", "as_o
                    "im_schedule", "hypothetical_margin_multiplier", "clearing_file_id", "clearing_revision", "file_max_age_seconds", "internal_shock_pct")
 
 
-def compute_margin(session, tenant_id: str, context: dict, snapshot_id: str | None, terms_hash: str | None,
-                   rule_set_hash: str | None, methodology: str) -> dict:
+def _compute(session, tenant_id: str, context: dict, snapshot_id: str | None, terms_hash: str | None,
+             rule_set_hash: str | None, methodology: str) -> tuple[dict, str, datetime]:
+    """Pure computation of a MarginResult shell + its cache key. Raises _Hit on a cache hit (never during replay)."""
     try:
         canonical_bytes(context)
     except CanonicalError as exc:
@@ -432,30 +482,99 @@ def compute_margin(session, tenant_id: str, context: dict, snapshot_id: str | No
             cache_key = _otc(session, tenant_id, context, shell, as_of, snapshot_id, terms_hash, rule_set_hash)
         else:
             cache_key = _etd(session, tenant_id, context, shell, as_of, snapshot_id, rule_set_hash, mt)
-    except _Hit as h:
-        return h.payload
     except _Block as b:
         shell["status"] = "BLOCKED"
         shell["blocking_reasons"] = b.reasons
         shell["required_amount"] = shell["rounded_amount"] = shell["unrounded_amount"] = None
         shell["direction"] = "NONE"
         cache_key = cache_key or content_hash({"t": tenant_id, "blocked": shell["blocking_reasons"], "ctx": shell["context_used"]})
+    return shell, cache_key, as_of
+
+
+def compute_margin(session, tenant_id: str, context: dict, snapshot_id: str | None, terms_hash: str | None,
+                   rule_set_hash: str | None, methodology: str) -> dict:
+    try:
+        shell, cache_key, as_of = _compute(session, tenant_id, context, snapshot_id, terms_hash, rule_set_hash, methodology)
+    except _Hit as h:
+        return h.payload
     return _persist(session, tenant_id, context, shell, cache_key, as_of)
+
+
+def business_hash(payload: dict) -> str:
+    """Canonical BUSINESS hash of a MarginResult: excludes run identity (result_id/result_hash) and the float-based internal
+    analytics, which replay compares with a declared tolerance instead (platform-dependent math library)."""
+    return content_hash({k: v for k, v in payload.items() if k not in BUSINESS_HASH_EXCLUDE})
+
+
+def _replay_spec(shell: dict) -> dict:
+    """Evidence payload.replay for a computed result (see app/engines/evidence/replay.py contract)."""
+    ie = shell.get("internal_estimate") or {}
+    values = {"required_amount": (shell.get("required_amount") or {}).get("amount"), "exposure": (shell.get("exposure") or {}).get("amount")}
+    if ie.get("estimated_loss") is not None:
+        values["internal_estimated_loss"] = ie["estimated_loss"]
+    values = {k: v for k, v in values.items() if v is not None}
+    q = shell.get("quality") or {}
+    spec = {"replayer": "replay.risk", "engine_version": ENGINE_VERSION, "method_version": f"{shell['method']}/{METHOD_VERSION}",
+            "business_hash": business_hash(shell), "values": values,
+            "inputs": {"context": shell["context_used"], "snapshot_id": shell["snapshot_id"], "terms_hash": shell["terms_hash"],
+                       "rule_set_hash": shell["rule_set_hash"], "methodology": shell["method"],
+                       "trade_ids": sorted(v["trade_id"] for v in shell.get("trade_valuations") or []),
+                       "clearing_file": [q["file_id"], q["file_revision"]] if q.get("file_id") else None}}
+    if "internal_estimated_loss" in values:
+        spec["tolerance"] = "0.01"  # only the float-based internal estimate is tolerance-compared; the business hash is bitwise
+    return spec
+
+
+def _parents(shell: dict) -> list[dict]:
+    """Lineage edges (parent -> this result) in the vocabulary of app/engines/evidence/lineage.py."""
+    ps = []
+    if shell.get("snapshot_id"):
+        ps.append({"entity_type": "risk_snapshot", "entity_id": shell["snapshot_id"]})
+    q = shell.get("quality") or {}
+    if q.get("file_id"):
+        ps.append({"entity_type": "risk_clearing_file", "entity_id": f"{q['file_id']}#{q['file_revision']}"})
+    if shell.get("terms_hash"):
+        ps.append({"entity_type": "contract_terms_hash", "entity_id": shell["terms_hash"]})
+    if shell.get("rule_set_hash"):
+        ps.append({"entity_type": "rule_set", "entity_id": shell["rule_set_hash"]})
+    return ps
 
 
 def _persist(session, tenant_id: str, ctx: dict, shell: dict, cache_key: str, as_of: datetime) -> dict:
     shell["result_hash"] = content_hash({k: v for k, v in shell.items() if k not in ("result_id", "result_hash")})
     shell["result_id"] = new_id()
-    session.add(RiskResult(result_id=shell["result_id"], tenant_id=tenant_id, market_type=shell["market_type"] or "?",
-                           subject_id=shell.get("netting_set_id") or shell.get("account_id"), status=shell["status"],
-                           cache_key=cache_key, result_hash=shell["result_hash"], payload=shell, source_ref=f"risk:{shell['method']}"))
-    session.flush()
+    row = RiskResult(result_id=shell["result_id"], tenant_id=tenant_id, market_type=shell["market_type"] or "?",
+                     subject_id=shell.get("netting_set_id") or shell.get("account_id"), status=shell["status"],
+                     cache_key=cache_key, result_hash=shell["result_hash"], payload=shell, source_ref=f"risk:{shell['method']}")
+    if shell["status"] in ("OK", "UNSUPPORTED"):
+        # Atomic create-if-absent: the partial unique index (tenant, cache_key) makes a concurrent identical compute lose cleanly.
+        # The loser returns the winner's immutable result and writes NO evidence of its own (no duplicate material effect).
+        sp = session.begin_nested()
+        session.add(row)
+        try:
+            session.flush()
+            sp.commit()
+        except IntegrityError:
+            sp.rollback()
+            if row in session:
+                session.expunge(row)
+            winner = session.execute(select(RiskResult).where(RiskResult.tenant_id == tenant_id, RiskResult.cache_key == cache_key,
+                                                              RiskResult.status.in_(("OK", "UNSUPPORTED")))
+                                     .execution_options(populate_existing=True).limit(1)).scalar_one()
+            return winner.payload
+    else:
+        session.add(row)
+        session.flush()
     action = {"OK": "MARGIN_COMPUTED", "UNSUPPORTED": "MARGIN_UNSUPPORTED"}.get(shell["status"], "MARGIN_BLOCKED")
+    ev_payload = {"status": shell["status"], "market_type": shell["market_type"], "required_amount": shell["required_amount"],
+                  "direction": shell["direction"], "hypothetical": shell["hypothetical"], "snapshot_id": shell["snapshot_id"],
+                  "snapshot_as_of": shell["snapshot_as_of"], "terms_hash": shell["terms_hash"], "rule_set_hash": shell["rule_set_hash"],
+                  "parents": _parents(shell)}
+    if shell["status"] == "OK":
+        ev_payload["replay"] = _replay_spec(shell)
     _evidence(session, tenant_id, ctx, action, "risk_result", shell["result_id"], effective_at=as_of, input_hashes=shell["input_hashes"],
               output_hash=shell["result_hash"], rationale="; ".join(shell["blocking_reasons"]) or f"{shell['method']} {shell['method_version']}",
-              payload={"status": shell["status"], "market_type": shell["market_type"], "required_amount": shell["required_amount"],
-                       "direction": shell["direction"], "hypothetical": shell["hypothetical"], "snapshot_id": shell["snapshot_id"],
-                       "terms_hash": shell["terms_hash"], "rule_set_hash": shell["rule_set_hash"]})
+              payload=ev_payload)
     if shell["status"] == "OK":
         _emit(session, tenant_id, ctx, "MarginComputed", shell["result_id"], {"result_id": shell["result_id"], "required_amount": shell["required_amount"],
                                                                               "direction": shell["direction"], "market_type": shell["market_type"]}, as_of)
@@ -502,7 +621,11 @@ def _otc(session, tenant_id, context, shell, as_of, snapshot_id, terms_hash, rul
     if not isinstance(held, dict) or "PARTY_A" not in held or "PARTY_B" not in held:
         raise _Block("context.existing_vm_balance {PARTY_A,PARTY_B} is required (no silent default for existing collateral)")
     snap = _load_snapshot(session, tenant_id, snapshot_id)
+    shell["snapshot_as_of"] = snap.data_as_of.isoformat()
     rows = session.execute(select(RiskTrade).where(RiskTrade.tenant_id == tenant_id, RiskTrade.netting_set_id == ns).order_by(RiskTrade.trade_id)).scalars().all()
+    pin = (_REPLAY.get() or {}).get("trade_ids")
+    if pin is not None:  # replay: exactly the trades that were valued originally (trades added later must not change a replay)
+        rows = [r for r in rows if r.trade_id in pin]
     trades = _trade_dicts(rows)
     trades_hash = content_hash([(t["trade_id"], t["payload"]) for t in trades])
     key = content_hash({"t": tenant_id, "snap": snap.content_hash, "terms": terms_hash, "rules": rule_set_hash, "trades": trades_hash,
@@ -536,6 +659,8 @@ def _otc(session, tenant_id, context, shell, as_of, snapshot_id, terms_hash, rul
             shell["provenance_flags"].append("REGULATORY_RULE_SET_PINNED")
         except Unavailable:
             shell["warnings"].append("regulatory.rule_parameters unavailable: regulatory applicability of IM/VM NOT established")
+        except NotFound:
+            raise _Block(f"rule_set_hash {rule_set_hash[:12]} is not a known approved rule set (cannot establish regulatory applicability)") from None
     else:
         shell["warnings"].append("no rule_set_hash pinned: result is contract-driven synthetic policy; regulatory IM/VM applicability UNKNOWN (no real-policy conclusion)")
     if not trades:
@@ -603,7 +728,10 @@ def _etd(session, tenant_id, context, shell, as_of, snapshot_id, rule_set_hash, 
         raise _Block(f"venue {context['venue']} does not belong to the {mt} profile (expected {venue_expected}); domestic and IFSC policies are independent")
     shell["currency"] = ccy
     snap = _load_snapshot(session, tenant_id, snapshot_id)
-    f = _latest_file(session, tenant_id, acc, context.get("clearing_file_id"), context.get("clearing_revision"))
+    shell["snapshot_as_of"] = snap.data_as_of.isoformat()
+    rp = (_REPLAY.get() or {}).get("file")  # replay: the exact clearing file revision used originally, not "latest now"
+    f = _latest_file(session, tenant_id, acc, (context.get("clearing_file_id") or (rp[0] if rp else None)),
+                     (context.get("clearing_revision") or (rp[1] if rp else None)))
     mult_ctx = context.get("hypothetical_margin_multiplier")
     key = content_hash({"t": tenant_id, "snap": snap.content_hash, "file": f.content_hash if f else None, "rules": rule_set_hash, "ctx": shell["context_used"],
                         "v": METHOD_VERSION, "method": shell["method"]})
@@ -635,6 +763,8 @@ def _etd(session, tenant_id, context, shell, as_of, snapshot_id, rule_set_hash, 
                 shell["provenance_flags"].append("REGULATORY_RULE_SET_PINNED")
         except Unavailable:
             shell["warnings"].append("regulatory.rule_parameters unavailable: no rule-driven adjustment applied")
+        except NotFound:
+            raise _Block(f"rule_set_hash {rule_set_hash[:12]} is not a known approved rule set") from None
     if mult is None and mult_ctx is not None:
         mult, hyp = to_decimal(mult_ctx, field="hypothetical_margin_multiplier"), True
     if mult is not None and mult <= 0:
@@ -747,6 +877,105 @@ def _load_snapshot_or_404(session, tenant_id, snapshot_id):
         return _load_snapshot(session, tenant_id, snapshot_id)
     except _Block as b:
         raise NotFound("; ".join(b.reasons)) from None
+
+
+# --------------------------------------------------------------------------- contract v1.1: positions, reconciliation, replay
+def get_positions(session, tenant_id: str, account_id: str, as_of) -> dict:
+    """Contract v1.1. Raw position metrics for A5 position-limit rules. NEVER fabricates: any metric that cannot be computed from
+    pinned inputs is None with a reason (UNKNOWN downstream, not zero). Gross/net lots need only the imported positions;
+    notional and delta-equivalent additionally need marks from the latest pinned snapshot at or before as_of."""
+    as_of = _ts(as_of) if isinstance(as_of, str) else as_of
+    pos = _positions(session, tenant_id, account_id, as_of)
+    out = {"account_id": account_id, "gross_lots": None, "net_lots": None, "delta_equivalent_lots": None, "notional": None, "currency": None,
+           "client_class": "UNKNOWN", "as_of": None, "source": None, "warnings": [], "available": False}
+    out["client_class_note"] = ("client/proprietary/member classification is NOT an input of the risk engine; reported as UNKNOWN "
+                                "(a position-limit control must treat it as UNKNOWN, never as a pass)")
+    if not pos:
+        out["warnings"].append("NO_POSITIONS_IMPORTED: no positions at or before as_of for this account")
+        return out
+    latest = max(session.execute(select(RiskPosition.as_of).where(RiskPosition.tenant_id == tenant_id, RiskPosition.account_id == account_id,
+                                                                   RiskPosition.as_of <= as_of)).scalars().all())
+    ids = [p["instrument_id"] for p in pos]
+    insts = {r.instrument_id: r.payload for r in session.execute(select(RiskInstrument).where(RiskInstrument.tenant_id == tenant_id,
+                                                                                               RiskInstrument.instrument_id.in_(ids))).scalars()}
+    out.update(available=True, as_of=latest.isoformat(), source=f"risk_positions rows={len(pos)} at {latest.isoformat()}")
+    lots = [Decimal(p["signed_lots"]) for p in pos]
+    out["gross_lots"] = dstr(sum((abs(x) for x in lots), Decimal(0)))
+    out["net_lots"] = dstr(sum(lots, Decimal(0)))
+    ccys = {insts[i]["currency"] for i in ids if i in insts}
+    if len(ccys) == 1:
+        out["currency"] = next(iter(ccys))
+    elif ccys:
+        out["warnings"].append(f"MIXED_CURRENCIES {sorted(ccys)}: notional not aggregated across currencies")
+    missing = [i for i in ids if i not in insts]
+    if missing:
+        out["warnings"].append(f"instrument definitions missing for {missing}: notional/delta unavailable")
+        return out
+    snaps = session.execute(select(RiskSnapshot).where(RiskSnapshot.tenant_id == tenant_id, RiskSnapshot.data_as_of <= as_of)
+                            .order_by(RiskSnapshot.data_as_of.desc(), RiskSnapshot.snapshot_id)).scalars().all()
+    if not snaps or len(ccys) != 1:
+        out["warnings"].append("NO_SNAPSHOT_AT_OR_BEFORE_AS_OF: notional and delta-equivalent unavailable (not zero)")
+        return out
+    last_err = None
+    for snap in snaps:  # latest pinned snapshot at/before as_of that actually carries the marks/vols these instruments need
+        try:
+            m = etd.position_metrics(pos, insts, MarketData(snap.payload), latest.date())
+        except (PricingError, KeyError, ValueError, ArithmeticError) as exc:
+            last_err = exc
+            continue
+        out["notional"], out["delta_equivalent_lots"] = m["notional"], m["delta_equivalent_lots"]
+        out["source"] += f"; marks from snapshot {snap.snapshot_id} (data_as_of {snap.data_as_of.isoformat()})"
+        return out
+    out["warnings"].append(f"notional/delta unavailable from every pinned snapshot at or before as_of (last error: {last_err}); reported as unknown, not zero")
+    return out
+
+
+def reconciliation_status(session, tenant_id: str, account_id: str, as_of) -> dict:
+    """Contract v1.1. Status of the latest clearing file for the account dated at or before as_of, RECOMPUTED from stored rows
+    (independent of the import-time status). UNKNOWN (never OK) when there is no file."""
+    as_of = _ts(as_of) if isinstance(as_of, str) else as_of
+    f = session.execute(select(RiskClearingFile).where(RiskClearingFile.tenant_id == tenant_id, RiskClearingFile.account_id == account_id,
+                                                       RiskClearingFile.as_of <= as_of)
+                        .order_by(RiskClearingFile.as_of.desc(), RiskClearingFile.revision.desc(), RiskClearingFile.created_at.desc(),
+                                RiskClearingFile.file_id.desc())).scalars().first()
+    if f is None:
+        return {"status": "UNKNOWN", "expected_total": None, "imported_total": None, "difference": None, "currency": None, "file_id": None,
+                "reason": f"no clearing file for {account_id} at or before {as_of.isoformat()}"}
+    rows = [{"component": r["component"], "amount": Decimal(r["amount"]), "currency": r["currency"], "kind": r["kind"]} for r in f.rows]
+    rec = clr.reconcile(rows, None)
+    # EXCEPTION = a discrepancy was found; UNKNOWN = it cannot be reconciled at all (no reported total supplied). UNKNOWN is never OK.
+    status = "OK" if rec["status"] == "RECONCILED" else ("UNKNOWN" if rec["reported_total"] is None else "EXCEPTION")
+    return {"status": status, "expected_total": dstr(rec["computed_total"]), "imported_total": dstr(rec["reported_total"]) if rec["reported_total"] is not None else None,
+            "difference": dstr(rec["difference"]) if rec["difference"] is not None else None, "currency": f.currency, "file_id": f.file_id,
+            "revision": f.revision, "file_as_of": f.as_of.isoformat(), "reason": rec["reason"],
+            "expected_total_definition": "independent sum of additive component rows; the reported total is never trusted or added"}
+
+
+def replay_risk(session, tenant_id: str, spec: dict) -> dict:
+    """Replayer registered as replay.risk (called by evidence.replay_run inside a SAVEPOINT that is always rolled back).
+    Recomputes from persisted inputs with the result cache bypassed and the original trades / clearing file revision pinned.
+    Raises when a replay cannot be performed (the caller reports NOT_REPLAYABLE) - it never silently substitutes inputs."""
+    inp = spec.get("inputs") or {}
+    meth = inp.get("methodology")
+    if meth not in METHODS:
+        raise ValueError(f"methodology {meth!r} is not available in this engine version")
+    pins = {"no_cache": True, "trade_ids": set(inp["trade_ids"]) if inp.get("trade_ids") is not None else None,
+            "file": tuple(inp["clearing_file"]) if inp.get("clearing_file") else None}
+    tok = _REPLAY.set(pins)
+    try:
+        shell, _, _ = _compute(session, tenant_id, dict(inp["context"]), inp.get("snapshot_id"), inp.get("terms_hash"), inp.get("rule_set_hash"), meth)
+    finally:
+        _REPLAY.reset(tok)
+    if shell["status"] != "OK":
+        raise RuntimeError(f"REPLAY_INPUT_UNAVAILABLE: recomputation is {shell['status']}: {'; '.join(shell['blocking_reasons'])[:200]}")
+    rs = _replay_spec(shell)
+    out = {"engine_version": ENGINE_VERSION, "method_version": f"{meth}/{METHOD_VERSION}", "business_hash": rs["business_hash"], "values": rs["values"]}
+    return out
+
+
+services.register("risk.get_positions", get_positions)
+services.register("risk.reconciliation_status", reconciliation_status)
+services.register("replay.risk", replay_risk)
 
 
 services.register("risk.compute_margin", compute_margin)

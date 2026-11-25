@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.core import events
 from app.core.events import MAX_ATTEMPTS, dispatch_once, emit, requeue_dead, subscribe
@@ -23,6 +23,11 @@ def emit_one(s, tenant, etype="MarginComputed"):
 def clean_handlers():
     saved = {k: list(v) for k, v in events._HANDLERS.items()}
     events._HANDLERS.clear()
+    # Other engines' tests leave PENDING rows in the shared test DB; dispatch_once is oldest-first with a limit,
+    # so drain unrelated rows to keep these tests about the outbox itself (test isolation, not product behaviour).
+    with SessionLocal() as s:
+        s.execute(update(OutboxEvent).where(OutboxEvent.status == "PENDING").values(status="DELIVERED"))
+        s.commit()
     yield
     events._HANDLERS.clear()
     events._HANDLERS.update(saved)

@@ -151,7 +151,7 @@ def test_waiver_endpoints_enforce_maker_checker(app_client, seeded):
 def test_controls_endpoint_reports_coverage_denominator_not_percentage(app_client, seeded):
     j = login(app_client, "tenant-a", "viewer").get(f"{API}/controls").json()
     c = j["coverage"]
-    assert c["registered"] == 9 and c["unsupported"] == 3 and "unknown_count" in c and "latest_status_counts" in c
+    assert c["registered"] == 10 and c["unsupported"] == 0 and "unknown_count" in c and "latest_status_counts" in c
     assert not any("percent" in k or "score" in k for k in c)
 
 

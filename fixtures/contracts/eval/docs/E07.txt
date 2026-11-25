@@ -1,0 +1,16 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E07 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E07 to Master MA-EVAL-E07
+Party A: Larch Demo Bank. Party B: Quill Demo Clearing.
+Base Currency: USD.
+Effective Date: 2026-07-01.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Larch Demo Bank: USD 2,000,000.
+(b) Threshold with respect to Quill Demo Clearing: USD 2,000,000.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Larch Demo Bank: USD 100,000.
+(b) Minimum Transfer Amount with respect to Quill Demo Clearing: USD 100,000.
+
+Paragraph 3. Illustration (explanatory only; this paragraph is not operative and creates no obligation).
+By way of example only, had the parties agreed that the Threshold with respect to Larch Demo Bank: USD 99,000,000. then no transfer would arise on a small exposure.

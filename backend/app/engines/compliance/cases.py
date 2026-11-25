@@ -65,7 +65,11 @@ def _bump(c: CmpCase):
 def _record(session, p, c, action, payload, *, event_type, frm=None, to=None, comment=None, as_of=None, outbox=None):
     E.add_case_event(session, c.tenant_id, c.case_id, event_type, p.user_id, frm=frm, to=to, comment=comment, data=payload, as_of=as_of)
     corr = (c.eval_context or {}).get("correlation_id") or c.case_id
-    E._ev(session, c.tenant_id, actor_of(p), action, "case", c.case_id, c.revision, corr, payload, effective_at=as_of, rationale=comment)
+    parents = [{"entity_type": "control_evaluation", "entity_id": c.last_evaluation_id}] if c.last_evaluation_id else []
+    if payload.get("approval_id"):
+        parents.append({"entity_type": "approval", "entity_id": payload["approval_id"]})
+    E._ev(session, c.tenant_id, actor_of(p), action, "case", c.case_id, c.revision, corr, {**payload, "parents": parents},
+          effective_at=as_of, rationale=comment)
     if outbox:
         emit(session, event_type=outbox, tenant_id=c.tenant_id, correlation_id=corr, aggregate_id=c.case_id,
              aggregate_revision=c.revision, actor_id=p.user_id, actor_type="USER", payload={"state": c.state}, effective_at=as_of)
@@ -256,7 +260,7 @@ def add_comment(session, p: Principal, case_id: str, text: str) -> CmpCase:
 def recheck(session, tenant_id: str, case_id: str, snapshot_id, *, as_of=None, facts=None, actor_id="system", actor_type="SYSTEM",
             actor_role=None, correlation_id=None) -> dict:
     """Fresh deterministic re-evaluation of the case's control for its subject. Never edits history or rules."""
-    c = get_case(session, tenant_id, case_id)
+    c = get_case(session, tenant_id, case_id, lock=True)
     if c.kind == "ANOMALY_INVESTIGATION":
         raise Blocked("anomaly cases have no deterministic control to recheck; close with review and independent approval", code="NO_RECHECK")
     ctx = dict(c.eval_context or {})
@@ -272,7 +276,7 @@ def recheck(session, tenant_id: str, case_id: str, snapshot_id, *, as_of=None, f
     ctrls = E.active_controls(session, tenant_id, asof, only_key=c.control_key)
     if not ctrls:
         raise Blocked("no active revision of this control at the given as_of", code="CONTROL_NOT_ACTIVE")
-    fct, prov, reasons = E.gather_facts(session, tenant_id, ctx, c.margin_result_id, c.allocation_id, facts)
+    fct, prov, reasons = E.gather_facts(session, tenant_id, ctx, c.margin_result_id, c.allocation_id, facts, {c.family})
     ev, _ = E.run_control(session, tenant_id, ctrls[-1], ctx, fct, prov, reasons, asof, snapshot_id, ctx.get("rule_set_hash"),
                           c.margin_result_id, c.allocation_id, cid, actor, is_recheck=True)
     ev.case_id = c.case_id
@@ -310,7 +314,8 @@ def create_waiver(session, p: Principal, body: dict) -> CmpWaiver:
 
 
 def approve_waiver(session, p: Principal, waiver_id: str, decision: str, reason: str) -> CmpWaiver:
-    w = session.execute(select(CmpWaiver).where(CmpWaiver.tenant_id == p.tenant_id, CmpWaiver.waiver_id == waiver_id)).scalar_one_or_none()
+    wq = select(CmpWaiver).where(CmpWaiver.tenant_id == p.tenant_id, CmpWaiver.waiver_id == waiver_id)
+    w = session.execute(lock_for_update(wq).execution_options(populate_existing=True)).scalar_one_or_none()
     if w is None:
         raise NotFound("Waiver not found")
     if w.status != "PENDING":
@@ -348,8 +353,10 @@ def coverage(session, tenant_id: str, as_of: datetime | None) -> dict:
     evals = session.execute(select(CmpEvaluation).where(CmpEvaluation.tenant_id == tenant_id, CmpEvaluation.is_recheck.is_(False))
                             .order_by(CmpEvaluation.as_of, CmpEvaluation.created_at)).scalars().all()
     cur: dict[tuple, CmpEvaluation] = {}
+    hyp: dict[tuple, CmpEvaluation] = {}
     for e in evals:
-        cur[(e.control_key, e.subject_id)] = e
+        # hypothetical (what-if / draft-rule) outcomes are NEVER official compliance status: counted separately (spec R-A09)
+        (hyp if (e.trace or {}).get("hypothetical") else cur)[(e.control_key, e.subject_id)] = e
     counts = {k: 0 for k in ("PASS", "FAIL", "UNKNOWN", "NOT_APPLICABLE", "CONFLICT", "ERROR")}
     for e in cur.values():
         counts[e.status] += 1
@@ -371,6 +378,7 @@ def coverage(session, tenant_id: str, as_of: datetime | None) -> dict:
                          "supported_and_evaluated": sum(1 for c in supported if c.control_key in evaluated_keys),
                          "supported_not_evaluated": sum(1 for c in supported if c.control_key not in evaluated_keys),
                          "subject_evaluations": len(cur), "latest_status_counts": counts, "unknown_count": counts["UNKNOWN"],
+                         "hypothetical_evaluations": len(hyp), "hypothetical_status_counts": {k: sum(1 for e in hyp.values() if e.status == k) for k in counts if any(e.status == k for e in hyp.values())},
                          "note": "No generic compliance percentage is shown: the absence of alerts is not compliance. UNKNOWN is never PASS."},
             "freshness": {"latest_evaluation_as_of": last.isoformat() if last else None}}
 

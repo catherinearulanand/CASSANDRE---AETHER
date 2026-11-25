@@ -42,11 +42,11 @@ def _run(db: Session, p: Principal, run_id: str) -> Run:
 @router.get("/events")
 def events(actor_id: str | None = None, action: str | None = None, entity_id: str | None = None, entity_type: str | None = None,
            engine: str | None = None, correlation_id: str | None = None, from_ts: datetime | None = None,
-           to_ts: datetime | None = None, cursor: int | None = None, limit: int = 50,
+           to_ts: datetime | None = None, cursor: int | None = None, limit: int = 50, sequence: int | None = None,
            db: Session = Depends(get_db), p: Principal = Depends(require_roles(*READ_ROLES))):
     out = ops.search_events(db, p.tenant_id, roles=set(p.roles), actor_id=actor_id, action=action, entity_id=entity_id,
                             entity_type=entity_type, engine=engine, correlation_id=correlation_id, from_ts=from_ts,
-                            to_ts=to_ts, cursor=cursor, limit=limit)
+                            to_ts=to_ts, cursor=cursor, limit=limit, sequence=sequence)
     ops.log_access(db, p.tenant_id, p.user_id, "SEARCH_EVENTS", {"filters": {k: v for k, v in dict(
         actor_id=actor_id, action=action, entity_id=entity_id, engine=engine, correlation_id=correlation_id).items() if v}})
     return out
@@ -59,15 +59,48 @@ def lineage(run_id: str, db: Session = Depends(get_db), p: Principal = Depends(r
     return {"run_id": run_id, **build_lineage(db, p.tenant_id, r.correlation_id)}
 
 
+@router.get("/entities/{entity_id}/lineage")
+def entity_lineage(entity_id: str, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*READ_ROLES))):
+    """Deep link target /evidence?entity=<id>. Resolves an entity id (or a run id) to the decision graph(s) it belongs to.
+    Tenant-scoped: an id that exists only in another tenant is indistinguishable from an unknown id."""
+    from sqlalchemy import String, cast, or_
+    from app.engines.evidence.models import EvEvent
+    if len(entity_id) > 120:
+        raise ValidationFailed("entity id too long", field_errors={"entity_id": "max 120 chars"})
+    run = db.get(Run, entity_id)
+    corrs: dict[str, dict] = {}
+    if run is not None and run.tenant_id == p.tenant_id:
+        corrs[run.correlation_id] = {"match": "RUN", "run_id": run.run_id}
+    own = db.execute(select(EvEvent.correlation_id, EvEvent.sequence).where(EvEvent.tenant_id == p.tenant_id, EvEvent.entity_id == entity_id)
+                     .order_by(EvEvent.sequence).limit(500)).all()
+    for c, _seq in own:
+        corrs.setdefault(c, {"match": "ENTITY"})
+    # bounded fallback: entity recorded only as a parent inside another event's payload
+    like = db.execute(select(EvEvent.correlation_id, EvEvent.payload).where(
+        EvEvent.tenant_id == p.tenant_id, cast(EvEvent.payload, String).like(f"%{entity_id}%")).limit(500)).all()
+    for c, payload in like:
+        if any(isinstance(x, dict) and str(x.get("entity_id")) == entity_id for x in (payload or {}).get("parents", []) or []):
+            corrs.setdefault(c, {"match": "PARENT"})
+    ops.log_access(db, p.tenant_id, p.user_id, "RESOLVE_ENTITY", {"entity_id": entity_id, "correlations": len(corrs)})
+    if not corrs:
+        return {"entity_id": entity_id, "found": False, "decisions": [], "lineage": None,
+                "message": "No evidence event in this tenant references this id (it may not exist, or evidence was never recorded)."}
+    runs = {r.correlation_id: r.run_id for r in db.execute(select(Run).where(Run.tenant_id == p.tenant_id, Run.correlation_id.in_(list(corrs)))).scalars()}
+    decisions = [{"correlation_id": c, "run_id": runs.get(c), **m} for c, m in corrs.items()]
+    first = decisions[0]["correlation_id"]
+    return {"entity_id": entity_id, "found": True, "decisions": decisions, "lineage": {"run_id": runs.get(first), **build_lineage(db, p.tenant_id, first)}}
+
+
 class VerifyBody(BaseModel):
     anchor: str = Field(default="exported_checkpoints", pattern="^(exported_checkpoints|chain_only)$")
+    mode: str = Field(default="full", pattern="^(full|incremental)$")  # incremental: only events after the newest trusted anchor
 
 
 @router.post("/verify")
 def verify(body: VerifyBody | None = None, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*AUDIT_ROLES))):
     body = body or VerifyBody()
     from app.engines.evidence.service import verify_chain
-    res = verify_against_exported(db, p.tenant_id) if body.anchor == "exported_checkpoints" else {
+    res = verify_against_exported(db, p.tenant_id, mode=body.mode) if body.anchor == "exported_checkpoints" else {
         **verify_chain(db, p.tenant_id), "anchor_status": "CHAIN_ONLY_NO_ANCHOR_TRUNCATION_NOT_DETECTABLE"}
     ops.log_access(db, p.tenant_id, p.user_id, "VERIFY_CHAIN", {"valid": res["valid"], "anchor": body.anchor})
     if not res["valid"]:
@@ -171,11 +204,16 @@ def checkpoints(db: Session = Depends(get_db), p: Principal = Depends(require_ro
                          for c in exported_checkpoints(p.tenant_id)][:20]}
 
 
+class CheckpointBody(BaseModel):
+    mode: str = Field(default="full", pattern="^(full|incremental)$")
+
+
 @router.post("/checkpoints", status_code=201)
-def make_checkpoint(db: Session = Depends(get_db), p: Principal = Depends(require_roles(*AUDIT_ROLES)),
+def make_checkpoint(body: CheckpointBody | None = None, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*AUDIT_ROLES)),
                     idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
-    out, _ = run_idempotent(db, p.tenant_id, idempotency_key, "evidence.checkpoint", {}, lambda: {
-        k: v for k, v in create_checkpoint(db, p.tenant_id).items() if k != "exported_path"})
+    mode = (body or CheckpointBody()).mode
+    out, _ = run_idempotent(db, p.tenant_id, idempotency_key, "evidence.checkpoint", {"mode": mode}, lambda: {
+        k: v for k, v in create_checkpoint(db, p.tenant_id, mode=mode).items() if k != "exported_path"})
     return out
 
 
@@ -183,6 +221,19 @@ def make_checkpoint(db: Session = Depends(get_db), p: Principal = Depends(requir
 def public_keys(p: Principal = Depends(require_roles(*READ_ROLES))):
     return {"items": [{k: v for k, v in k_.items()} for k_ in keys.public_keys()],
             "warning": "Local file key, not an HSM. Distribute the public key to verifiers out-of-band."}
+
+
+class RotateBody(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+
+@router.post("/keys/rotate", status_code=201)
+def rotate_key(body: RotateBody, db: Session = Depends(get_db), p: Principal = Depends(require_roles("tenant_admin")),
+               idempotency_key: str | None = Header(default=None, alias="Idempotency-Key")):
+    """Audited signing-key rotation (tenant_admin). The key store is deployment-wide; see ops.rotate_signing_key."""
+    out, _ = run_idempotent(db, p.tenant_id, idempotency_key, "evidence.rotate_key", body.model_dump(),
+                            lambda: ops.rotate_signing_key(db, p.tenant_id, p.user_id, body.reason))
+    return out
 
 
 @router.get("/integrity")

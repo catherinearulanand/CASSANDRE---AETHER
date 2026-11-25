@@ -6,12 +6,14 @@ from datetime import datetime
 from sqlalchemy import func, select
 
 from app.core.errors import ValidationFailed
-from app.db.base import utcnow
+from app.db.base import lock_for_update, utcnow
 from app.db.models_core import OutboxEvent
 from app.engines.evidence import keys
 from app.engines.evidence.checkpoints import verify_against_exported
 from app.engines.evidence.models import EvAccessLog, EvChainHead, EvCheckpoint, EvEvent, EvRetention
+from app.engines.evidence._db import insert_ignore
 from app.engines.evidence.objects import storage_probe, verify_objects
+from app.engines.evidence.service import append
 
 FULL_DETAIL_ROLES = {"auditor", "compliance_officer", "tenant_admin"}
 RETENTION_CATEGORIES = ["EVIDENCE_EVENTS", "SOURCE_DOCUMENTS", "CALCULATIONS", "EXPORT_BUNDLES", "TEMP_OBJECTS", "ACCESS_LOG"]
@@ -37,13 +39,15 @@ def _out(e: EvEvent, full: bool) -> dict:
 def search_events(session, tenant_id: str, *, roles: set[str], actor_id: str | None = None, action: str | None = None,
                   entity_id: str | None = None, entity_type: str | None = None, engine: str | None = None,
                   correlation_id: str | None = None, from_ts: datetime | None = None, to_ts: datetime | None = None,
-                  cursor: int | None = None, limit: int = 50) -> dict:
+                  cursor: int | None = None, limit: int = 50, sequence: int | None = None) -> dict:
     limit = max(1, min(limit, 200))
     q = select(EvEvent).where(EvEvent.tenant_id == tenant_id)
     for col, val in ((EvEvent.actor_id, actor_id), (EvEvent.action, action), (EvEvent.entity_id, entity_id),
                      (EvEvent.entity_type, entity_type), (EvEvent.engine, engine), (EvEvent.correlation_id, correlation_id)):
         if val:
             q = q.where(col == val)
+    if sequence is not None:
+        q = q.where(EvEvent.sequence == sequence)
     if from_ts:
         q = q.where(EvEvent.recorded_at >= from_ts)
     if to_ts:
@@ -58,25 +62,53 @@ def search_events(session, tenant_id: str, *, roles: set[str], actor_id: str | N
 
 def get_retention(session, tenant_id: str) -> dict:
     rows = {r.category: r for r in session.execute(select(EvRetention).where(EvRetention.tenant_id == tenant_id)).scalars()}
+    def _configured(c: str) -> bool:  # rows can also be lock placeholders created by a purge (updated_by is None, nothing set)
+        r = rows.get(c)
+        return bool(r is not None and (r.retention_days is not None or r.legal_hold or r.updated_by is not None))
     items = [{"category": c, "retention_days": rows[c].retention_days if c in rows else None,
-              "legal_hold": rows[c].legal_hold if c in rows else False, "configured": c in rows} for c in RETENTION_CATEGORIES]
+              "legal_hold": rows[c].legal_hold if c in rows else False, "configured": _configured(c)} for c in RETENTION_CATEGORIES]
     return {"items": items, "note": ("No statutory retention period is assumed. Unconfigured categories have no period. "
                                      "Protected audit material (EVIDENCE_EVENTS, signed anchors) is never deleted through this "
                                      "application; deletion needs an approved institutional policy and archived anchors.")}
 
 
-def set_retention(session, tenant_id: str, category: str, retention_days: int | None, legal_hold: bool, actor_id: str) -> dict:
+def set_retention(session, tenant_id: str, category: str, retention_days: int | None, legal_hold: bool, actor_id: str,
+                  correlation_id: str = "retention") -> dict:
+    """Upsert under a row lock (two admins creating the same category at once no longer collide; a concurrent purge is
+    serialised with a legal-hold change) and RECORD the change in the evidence chain with the previous and new values."""
     if category not in RETENTION_CATEGORIES:
         raise ValidationFailed("unknown retention category", field_errors={"category": "unsupported"})
     if retention_days is not None and retention_days < 1:
         raise ValidationFailed("retention_days must be >= 1 or null", field_errors={"retention_days": "invalid"})
-    r = session.get(EvRetention, (tenant_id, category))
-    if r is None:
-        r = EvRetention(tenant_id=tenant_id, category=category)
-        session.add(r)
+    insert_ignore(session, EvRetention, tenant_id=tenant_id, category=category, legal_hold=False, updated_at=utcnow())
+    r = session.execute(lock_for_update(select(EvRetention).where(EvRetention.tenant_id == tenant_id, EvRetention.category == category))
+                        .execution_options(populate_existing=True)).scalar_one()
+    prev = {"retention_days": r.retention_days, "legal_hold": r.legal_hold}
     r.retention_days, r.legal_hold, r.updated_by, r.updated_at = retention_days, legal_hold, actor_id, utcnow()
     session.flush()
+    append(session, tenant_id, engine="evidence", action="RETENTION_CONFIG_CHANGED", actor_id=actor_id, actor_type="USER",
+           entity_type="retention_config", entity_id=category, correlation_id=correlation_id,
+           payload={"previous": prev, "new": {"retention_days": retention_days, "legal_hold": legal_hold}},
+           rationale=("LEGAL HOLD " + ("SET" if legal_hold else "CLEARED")) if prev["legal_hold"] != legal_hold else "retention period changed")
     return {"category": category, "retention_days": retention_days, "legal_hold": legal_hold}
+
+
+def rotate_signing_key(session, tenant_id: str, actor_id: str, reason: str, correlation_id: str = "key-rotation") -> dict:
+    """Audited key rotation. The key store is deployment-wide (all tenants share it); the action is recorded in the ACTING tenant's
+    chain with old/new key ids and the SHA-256 of the new public key so an auditor can match it to the key they distribute.
+    Old public keys are retained, so historical checkpoints/bundles stay verifiable; the old PRIVATE key stays on disk until the
+    operator archives/destroys it under institutional policy (not done here). Not an HSM ceremony."""
+    if not reason or len(reason.strip()) < 5:
+        raise ValidationFailed("a reason is required to rotate the signing key", field_errors={"reason": "min 5 characters"})
+    old = keys.current_key_id()
+    new = keys.rotate()
+    pub_sha = __import__("hashlib").sha256((keys._dir() / f"ev-{new}.pub").read_bytes()).hexdigest()
+    append(session, tenant_id, engine="evidence", action="SIGNING_KEY_ROTATED", actor_id=actor_id, actor_type="USER",
+           entity_type="signing_key", entity_id=new, correlation_id=correlation_id,
+           payload={"previous_key_id": old, "new_key_id": new, "new_public_key_sha256": pub_sha, "protection": "LOCAL_FILE_KEY_NOT_HSM"},
+           rationale=reason.strip())
+    return {"previous_key_id": old, "current_key_id": new, "new_public_key_sha256": pub_sha,
+            "note": "Distribute the new public key to verifiers out-of-band. Old public keys remain valid for historical checkpoints."}
 
 
 def integrity_dashboard(session, tenant_id: str) -> dict:

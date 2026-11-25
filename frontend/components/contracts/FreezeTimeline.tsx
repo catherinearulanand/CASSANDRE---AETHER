@@ -23,13 +23,14 @@ export default function FreezeTimeline({ pkg, terms, reload }: { pkg: PkgDetail;
   const [cmpOut, setCmpOut] = useState<Compare | null>(null);
   const [res, setRes] = useState({ asOf: PINNED_AS_OF, knownAt: "", facts: "" }); const [resOut, setResOut] = useState<Resolution | null>(null);
   const rd = terms.readiness;
+  const pending: Approval | null = approval ?? rd.pending_approval;  // another session's proposal is visible to the checker
 
   async function run<T>(fn: () => Promise<T>) { setBusy(true); setErr(null); try { return await fn(); } catch (e) { setErr(e as ApiError); } finally { setBusy(false); } }
 
   const propose = () => run(async () => { setApproval(await api<Approval>(`/contracts/${pkg.package_id}/freeze/propose`, { method: "POST", idempotencyKey: newKey(), body: { reason } })); await reload(); });
   const freeze = () => run(async () => {
-    if (!approval) return;
-    await api(`/contracts/${pkg.package_id}/freeze`, { method: "POST", idempotencyKey: newKey(), body: { approval_id: approval.approval_id, reason } });
+    if (!pending) return;
+    await api(`/contracts/${pkg.package_id}/freeze`, { method: "POST", idempotencyKey: newKey(), body: { approval_id: pending.approval_id, reason } });
     setApproval(null); setReason(""); await reload();
   });
   const addAmd = () => run(async () => {
@@ -58,12 +59,12 @@ export default function FreezeTimeline({ pkg, terms, reload }: { pkg: PkgDetail;
         <div className="row" style={{ marginTop: 8 }}>
           <button className="primary" disabled={busy || !isMaker || !rd.ready_to_freeze || reason.trim().length < 8} onClick={propose}
             title={isMaker ? "" : "Requires maker role"}>1 · Propose freeze (maker)</button>
-          <button disabled={busy || !isChecker || !approval || approval.maker_id === principal?.user_id || reason.trim().length < 8} onClick={freeze}
-            title={approval?.maker_id === principal?.user_id ? "An independent checker must approve" : !isChecker ? "Requires checker role" : ""}>2 · Approve exact hash &amp; freeze (checker)</button>
+          <button disabled={busy || !isChecker || !pending || pending.maker_id === principal?.user_id || reason.trim().length < 8} onClick={freeze}
+            title={pending?.maker_id === principal?.user_id ? "An independent checker must approve" : !isChecker ? "Requires checker role" : ""}>2 · Approve exact hash &amp; freeze (checker)</button>
         </div>
-        {approval && <div className="card" style={{ marginTop: 8 }}>
-          <div>Approval <span className="mono">{approval.approval_id.slice(0, 8)}</span> · {approval.decision} · binds revision {approval.target_revision} and hash <span className="mono">{approval.target_hash.slice(0, 16)}…</span></div>
-          <div className="muted">Maker {approval.maker_id} · expires {approval.expires_at}. Approval becomes invalid if any field changes.</div></div>}
+        {pending && <div className="card" style={{ marginTop: 8 }} role="region" aria-label="Pending freeze approval">
+          <div>Approval <span className="mono">{pending.approval_id.slice(0, 8)}</span> · {pending.decision} · binds revision {pending.target_revision} and hash <span className="mono">{pending.target_hash.slice(0, 16)}…</span></div>
+          <div className="muted">Maker {pending.maker_id} · expires {pending.expires_at}. Approval becomes invalid if any field changes.</div></div>}
         {err && <ErrorState error={err} />}
         {err && Object.entries(err.body.field_errors).map(([k, v]) => <div key={k} className="field-error">{v || k}</div>)}
       </section>

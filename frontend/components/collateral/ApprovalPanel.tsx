@@ -79,7 +79,7 @@ export default function ApprovalPanel({ proposalId }: { proposalId: string }) {
         <h2 style={{ margin: 0 }}>Proposal <span className="mono">{p.proposal_id.slice(0, 8)}</span></h2><StateChip state={p.state} />
         {p.hypothetical && <StatusChip tone="warn">HYPOTHETICAL — not approvable</StatusChip>}
         <span className="spacer" />
-        <Link href="/evidence">Audit trail in Evidence ↗</Link>
+        <Link href={`/evidence?entity=${p.proposal_id}`}>Audit trail in Evidence ↗</Link>
       </div>
       <p className="mono faint">correlation {p.correlation_id} · expires {p.expires_at} · hash {short(p.proposal_hash)} · revision {p.revision}</p>
       <div className="grid c2">
@@ -88,13 +88,14 @@ export default function ApprovalPanel({ proposalId }: { proposalId: string }) {
           <p className="muted">Maker: <span className="mono">{p.maker_id}</span>{selfMaker ? " (you)" : ""}. An independent checker must approve the exact revision and hash; approvals expire and become void if inventory, margin or terms change.</p>
           <div className="row">
             <button disabled={pending} onClick={reverify}>Re-verify</button>
-            <button className="primary" disabled={!isChecker || p.state !== "CHECKED" || selfMaker || p.kind !== "PROPOSAL"} onClick={() => { setErr(null); setAct("approve"); }}
-              title={selfMaker ? "You made this proposal; an independent checker is required" : !isChecker ? "Requires checker role" : p.state !== "CHECKED" ? "Only CHECKED proposals can be approved" : ""}>Approve…</button>
+            <button className="primary" disabled={!isChecker || p.state !== "CHECKED" || selfMaker || p.kind !== "PROPOSAL" || p.hypothetical} onClick={() => { setErr(null); setAct("approve"); }}
+              title={p.hypothetical ? "Derived from a HYPOTHETICAL margin result: never approvable" : selfMaker ? "You made this proposal; an independent checker is required" : !isChecker ? "Requires checker role" : p.state !== "CHECKED" ? "Only CHECKED proposals can be approved" : ""}>Approve…</button>
             <button disabled={!(isMaker || isChecker) || p.state !== "APPROVED"} onClick={() => { setErr(null); setAct("reserve"); }}>Reserve…</button>
             <button disabled={!(isMaker || isChecker) || p.state !== "RESERVED"} onClick={() => { setErr(null); setAct("draft"); }}>Draft instruction…</button>
             <button disabled={!(isMaker || isChecker) || !["PROPOSED", "CHECKED", "APPROVED", "RESERVED", "DRAFTED"].includes(p.state) || !!p.simulated_settlement}
               onClick={() => { setErr(null); setAct("cancel"); }}>Cancel…</button>
           </div>
+          {p.hypothetical && <p className="chip warn" role="note" style={{ borderRadius: 8 }}><span aria-hidden>!</span> This proposal comes from a HYPOTHETICAL margin result (e.g. a rule revision not in force). It can be inspected but never approved, reserved or drafted.</p>}
           {selfMaker && p.state === "CHECKED" && <p className="chip warn" style={{ borderRadius: 8 }}><span aria-hidden>!</span> You created this proposal — a different checker must approve it.</p>}
           {p.state === "EXPIRED" && <p className="chip danger" role="alert" style={{ borderRadius: 8 }}><span aria-hidden>✕</span> Expired or invalidated ({p.result?.expiry_reason ?? "time limit"}); the approval is void. Run a new optimisation.</p>}
           {p.state === "INFEASIBLE" && <p className="chip danger" style={{ borderRadius: 8 }}>Infeasible: no approval or instruction is possible.</p>}

@@ -6,13 +6,14 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core import services
 from app.core.canonical import CanonicalError, canonical_bytes, content_hash
 from app.core.errors import ApiError, ValidationFailed
 from app.core.events import emit
 from app.core.money import dstr, to_decimal
-from app.db.base import new_id
+from app.db.base import lock_for_update, new_id
 from app.engines.compliance import dsl
 from app.engines.compliance.controls import WAIVABLE_AUTHORITY
 from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpWaiver
@@ -20,9 +21,18 @@ from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, Cmp
 SLA_HOURS = {"CRITICAL": 4, "HIGH": 24, "MEDIUM": 72, "LOW": 120}
 SEV_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
 CASE_STATUSES = {"FAIL", "CONFLICT", "ERROR", "UNKNOWN"}
+ENGINE_VERSION = "aether-compliance/1.1"
+METHOD_VERSION = "control-eval/1"
+ALL_FAMILIES = {"MARGIN_COVERAGE", "POSITION_LIMIT", "RECONCILIATION", "FRESHNESS", "AGREEMENT", "COLLATERAL_CONCENTRATION",
+                "SETTLEMENT_DEADLINE", "REPORTING_COMPLETENESS"}
+# risk.get_positions returns several measures; the control declares which basis it needs. Mapping is explicit and documented
+# (docs/methodologies/compliance.md): GROSS_FUTURES_EQUIV -> the service's gross_lots. Other bases are not mapped => UNKNOWN.
+BASIS_MAP = {"GROSS_FUTURES_EQUIV": "gross_lots"}
+REPORT_SCHEMA = {"id": "DEMO-MARGIN-REPORT-v1 (synthetic; NOT an approved regulatory format; never transmitted)",
+                 "required": ["report_id", "account_id", "as_of", "currency", "required_margin", "posted_collateral"]}
 SERVICE_KEYS = {"required_margin_inr", "eligible_collateral_inr", "required_margin_usd", "eligible_collateral_usd"}
 CONTEXT_KEYS = {"market_type", "venue", "jurisdiction", "account_id", "currency", "as_of"}
-CALLER_ALLOWED = {"position_lots", "position_basis", "client_classification", "terms_status", "agreement_effective_from",
+CALLER_ALLOWED = {"report_record", "position_lots", "position_basis", "client_classification", "terms_status", "agreement_effective_from",
                   "agreement_effective_to", "source_age_hours", "source_retrieved_at", "reconciliation_status",
                   "positions", "input_as_of"}
 
@@ -50,6 +60,8 @@ def normalise_context(context: dict) -> dict:
     ctx["as_of"] = ts(context["as_of"]).isoformat()
     if not ctx["market_type"]:
         raise ValidationFailed("context.market_type is required", field_errors={"market_type": "required"})
+    if context.get("settlement_deadline"):
+        ctx["settlement_deadline"] = ts(context["settlement_deadline"], "settlement_deadline").isoformat()
     ctx["subject_id"] = ctx.get("account_id") or ctx.get("netting_set_id")
     if not ctx["subject_id"]:
         raise ValidationFailed("context.account_id or netting_set_id is required", field_errors={"account_id": "required"})
@@ -60,8 +72,10 @@ RISK_FIELDS = ("required_margin_inr", "required_margin_usd")
 COV_FIELDS = ("eligible_collateral_inr", "eligible_collateral_usd")
 
 
-def _r(msg: str, affects) -> dict:
-    return {"msg": msg, "affects": list(affects)}
+def _r(msg: str, affects, fallback: bool = False) -> dict:
+    """An input problem. fallback=True: an explicitly labelled CALLER_SUPPLIED fact may legitimately fill the gap
+    (it then resolves this reason); otherwise only the owning engine can."""
+    return {"msg": msg, "affects": list(affects), "fallback": fallback}
 
 
 def _relevant(reasons, c: CmpControl) -> list[str]:
@@ -71,19 +85,138 @@ def _relevant(reasons, c: CmpControl) -> list[str]:
     return [r if isinstance(r, str) else r["msg"] for r in reasons if isinstance(r, str) or need & set(r["affects"])]
 
 
-def gather_facts(session, tenant_id: str, ctx: dict, margin_result_id, allocation_id, caller_facts: dict | None):
-    """-> (facts, provenance, input_reasons). Missing/unavailable inputs become reasons, never zeros."""
+def _note_asof(facts: dict, prov: dict, value, source: str) -> None:
+    """input_as_of is the OLDEST of the timestamps of every input used (freshness fails closed on the stalest input)."""
+    try:
+        new = ts(value, "input_as_of")
+    except ValidationFailed:
+        return
+    cur = facts.get("input_as_of")
+    if cur is None or new < ts(cur, "input_as_of"):
+        facts["input_as_of"] = value if isinstance(value, str) else new.isoformat()
+        prov["input_as_of"] = f"SERVICE:{source} (oldest input)"
+
+
+def _fetch_positions(session, tenant_id, ctx, as_of, facts, prov, reasons):
+    aff = ("position_lots", "position_basis", "client_classification")
+    if not ctx.get("account_id"):
+        reasons.append(_r("POSITIONS_NO_ACCOUNT", aff, True))
+        return
+    try:
+        pos = services.call("risk.get_positions", session, tenant_id, ctx["account_id"], as_of)
+    except ApiError as exc:
+        reasons.append(_r(f"POSITIONS_UNAVAILABLE:{exc.code}", aff, True))
+        return
+    field = BASIS_MAP["GROSS_FUTURES_EQUIV"]
+    if pos.get(field) is None:
+        reasons.append(_r(f"POSITIONS_MEASURE_MISSING:{field}", ("position_lots", "position_basis"), True))
+    else:
+        facts["position_lots"], prov["position_lots"] = pos[field], f"SERVICE:risk.get_positions({field})"
+        facts["position_basis"], prov["position_basis"] = "GROSS_FUTURES_EQUIV", f"SERVICE:risk.get_positions (mapped from {field})"
+    # The risk engine does not own client/proprietary/member classification and reports "UNKNOWN": that is a MISSING input
+    # (control => UNKNOWN), never a value to compare against. Only a real classification is used.
+    if pos.get("client_class") and str(pos["client_class"]).upper() != "UNKNOWN":
+        facts["client_classification"], prov["client_classification"] = pos["client_class"], "SERVICE:risk.get_positions"
+    else:
+        reasons.append(_r("CLIENT_CLASSIFICATION_MISSING", ("client_classification",), True))
+    if pos.get("as_of"):
+        _note_asof(facts, prov, pos["as_of"], "risk.get_positions")
+
+
+def _fetch_reconciliation(session, tenant_id, ctx, as_of, facts, prov, reasons):
+    aff = ("reconciliation_status",)
+    if not ctx.get("account_id"):
+        reasons.append(_r("RECONCILIATION_NO_ACCOUNT", aff, True))
+        return
+    try:
+        rec = services.call("risk.reconciliation_status", session, tenant_id, ctx["account_id"], as_of)
+    except ApiError as exc:
+        reasons.append(_r(f"RECONCILIATION_UNAVAILABLE:{exc.code}", aff, True))
+        return
+    st = rec.get("status")
+    if st == "OK":
+        facts["reconciliation_status"] = "MATCHED"
+    elif st == "EXCEPTION":
+        facts["reconciliation_status"] = "EXCEPTION"
+        facts["reconciliation_difference"] = rec.get("difference")
+    else:
+        reasons.append(_r(f"RECONCILIATION_STATUS_{st or 'MISSING'}", aff, True))
+        return
+    prov["reconciliation_status"] = "SERVICE:risk.reconciliation_status"
+    if rec.get("as_of"):
+        _note_asof(facts, prov, rec["as_of"], "risk.reconciliation_status")
+
+
+def _fetch_concentration(session, tenant_id, allocation_id, facts, prov, reasons):
+    aff = ("concentration_breaches",)
+    if not allocation_id:
+        reasons.append(_r("CONCENTRATION_NO_ALLOCATION", aff))
+        return
+    try:
+        sl = services.call("collateral.constraint_slacks", session, tenant_id, allocation_id)
+    except ApiError as exc:
+        reasons.append(_r(f"CONSTRAINT_SLACKS_UNAVAILABLE:{exc.code}", aff))
+        return
+    breaches = 0
+    for c in sl:
+        try:
+            if to_decimal(c["slack"]) < 0:
+                breaches += 1
+        except Exception:  # noqa: BLE001
+            reasons.append(_r(f"CONSTRAINT_SLACK_INVALID:{c.get('name')}", aff))
+            return
+    facts["concentration_breaches"], prov["concentration_breaches"] = breaches, "SERVICE:collateral.constraint_slacks (slack<0 count)"
+    facts["concentration_constraints_checked"] = len(sl)
+
+
+def _validate_report(rec: dict) -> tuple[int, int, list[str]]:
+    """Field/format validation against the SYNTHETIC demo schema only. Returns (missing, format_errors, findings)."""
+    from app.core.money import SUPPORTED_CURRENCIES
+    missing = [f for f in REPORT_SCHEMA["required"] if rec.get(f) in (None, "")]
+    bad: list[str] = []
+    if rec.get("currency") not in (None, "") and rec["currency"] not in SUPPORTED_CURRENCIES:
+        bad.append("currency: not an allowed ISO code")
+    for f in ("required_margin", "posted_collateral"):
+        if rec.get(f) not in (None, ""):
+            try:
+                to_decimal(rec[f], field=f, allow_negative=False)
+            except Exception as exc:  # noqa: BLE001
+                bad.append(f"{f}: {exc}")
+    if rec.get("as_of") not in (None, ""):
+        try:
+            ts(rec["as_of"], "as_of")
+        except ValidationFailed:
+            bad.append("as_of: not an ISO-8601 timestamp with timezone")
+    extra = [k for k in rec if k not in REPORT_SCHEMA["required"]]
+    findings = [f"MISSING:{m}" for m in missing] + [f"FORMAT:{b}" for b in bad]
+    if extra:
+        findings.append("UNEXPECTED_FIELDS:" + ",".join(sorted(extra)))
+    return len(missing), len(bad), findings
+
+
+def gather_facts(session, tenant_id: str, ctx: dict, margin_result_id, allocation_id, caller_facts: dict | None,
+                 families: set[str] | None = None):
+    """-> (facts, provenance, input_reasons). Missing/unavailable inputs become reasons, never zeros.
+    `families` = extra families whose inputs to fetch from the owning engines (contract v1.1); caller-supplied facts
+    only fill what the services did not provide (explicitly labelled CALLER_SUPPLIED)."""
     as_of = ts(ctx["as_of"])
+    want = set(families or ())
     facts: dict = {k: ctx[k] for k in ("market_type", "venue", "jurisdiction", "account_id", "currency") if ctx.get(k)}
     prov = {k: "CONTEXT" for k in facts}
-    reasons: list[str] = []
+    reasons: list = []
     ccy = (ctx.get("currency") or "").upper() or None
     if margin_result_id:
         try:
             res = services.call("risk.get_result", session, tenant_id, margin_result_id)
+            rsub = res.get("account_id") or res.get("netting_set_id")
             if res.get("status") != "OK":
                 reasons.append(_r(f"MARGIN_RESULT_{res.get('status', 'UNKNOWN')}", RISK_FIELDS))
+            elif rsub and ctx.get("subject_id") and rsub != ctx["subject_id"]:
+                # a margin result belongs to ONE subject; using another account's requirement would be a silent cross-account read
+                reasons.append(_r(f"MARGIN_RESULT_SUBJECT_MISMATCH:{rsub}!={ctx['subject_id']}", RISK_FIELDS))
             else:
+                if res.get("hypothetical"):
+                    facts["hypothetical"], prov["hypothetical"] = True, "SERVICE:risk.get_result (rule revision / what-if parameter)"
                 req = res["required_amount"]
                 ccy = req["currency"]
                 if ccy in ("INR", "USD"):
@@ -94,9 +227,9 @@ def gather_facts(session, tenant_id: str, ctx: dict, margin_result_id, allocatio
                 for k in ("reconciliation_status",):
                     if res.get(k):
                         facts[k], prov[k] = res[k], "SERVICE:risk.get_result"
-                if res.get("as_of") or res.get("snapshot_as_of"):
-                    facts["input_as_of"] = res.get("as_of") or res.get("snapshot_as_of")
-                    prov["input_as_of"] = "SERVICE:risk.get_result"
+                # contract v1.1: snapshot_as_of (data time) is preferred; as_of (calculation time) is the fallback
+                if res.get("snapshot_as_of") or res.get("as_of"):
+                    _note_asof(facts, prov, res.get("snapshot_as_of") or res.get("as_of"), "risk.get_result")
         except ApiError as exc:
             reasons.append(_r(f"RISK_RESULT_UNAVAILABLE:{exc.code}", RISK_FIELDS))
     if (margin_result_id or allocation_id) and ctx.get("account_id") and ccy in ("INR", "USD"):
@@ -110,6 +243,28 @@ def gather_facts(session, tenant_id: str, ctx: dict, margin_result_id, allocatio
                 prov[f"eligible_collateral_{ccy.lower()}"] = "SERVICE:collateral.coverage (posted only)"
         except ApiError as exc:
             reasons.append(_r(f"COVERAGE_UNAVAILABLE:{exc.code}", COV_FIELDS))
+    if "SETTLEMENT_DEADLINE" in want and ccy in ("INR", "USD"):
+        key, aff = f"deadline_collateral_{ccy.lower()}", (f"deadline_collateral_{ccy.lower()}",)
+        if not ctx.get("settlement_deadline") or not ctx.get("account_id"):
+            reasons.append(_r("SETTLEMENT_DEADLINE_NOT_PROVIDED", aff))
+        else:
+            try:  # posted-only coverage AS OF the deadline; a merely proposed allocation is never counted
+                cov = services.call("collateral.coverage", session, tenant_id, ctx["account_id"],
+                                    ts(ctx["settlement_deadline"], "settlement_deadline"))
+                ep = cov["eligible_posted"]
+                if ep["currency"] != ccy:
+                    reasons.append(_r(f"DEADLINE_COVERAGE_CURRENCY_MISMATCH:{ep['currency']}!={ccy}", aff))
+                else:
+                    facts[key], prov[key] = ep["amount"], "SERVICE:collateral.coverage (posted only, as of settlement_deadline)"
+                    facts["settlement_deadline"] = ctx["settlement_deadline"]
+            except ApiError as exc:
+                reasons.append(_r(f"DEADLINE_COVERAGE_UNAVAILABLE:{exc.code}", aff))
+    if "POSITION_LIMIT" in want:
+        _fetch_positions(session, tenant_id, ctx, as_of, facts, prov, reasons)
+    if "RECONCILIATION" in want:
+        _fetch_reconciliation(session, tenant_id, ctx, as_of, facts, prov, reasons)
+    if "COLLATERAL_CONCENTRATION" in want:
+        _fetch_concentration(session, tenant_id, allocation_id, facts, prov, reasons)
     if caller_facts:
         bad = sorted(set(caller_facts) - CALLER_ALLOWED)
         if bad:
@@ -120,8 +275,18 @@ def gather_facts(session, tenant_id: str, ctx: dict, margin_result_id, allocatio
                 canonical_bytes(v)
             except CanonicalError as exc:
                 raise ValidationFailed(f"fact {k}: {exc}", field_errors={k: "floats not accepted; use decimal strings"}) from exc
+            if k == "report_record":
+                if not isinstance(v, dict):
+                    raise ValidationFailed("report_record must be an object", field_errors={k: "invalid"})
+                miss, fmt, findings = _validate_report(v)
+                facts["report_missing_fields"], facts["report_format_errors"], facts["report_findings"] = miss, fmt, findings
+                for kk in ("report_missing_fields", "report_format_errors", "report_findings"):
+                    prov[kk] = f"CALLER_SUPPLIED record validated against {REPORT_SCHEMA['id']}"
+                continue
             if k not in facts:
                 facts[k], prov[k] = v, "CALLER_SUPPLIED"
+    # a labelled CALLER_SUPPLIED fact that fills every field a fallback-eligible problem concerns resolves that problem
+    reasons[:] = [r for r in reasons if isinstance(r, str) or not (r.get("fallback") and all(f in facts for f in r["affects"]))]
     if "source_retrieved_at" in facts and "source_age_hours" not in facts:
         age = (as_of - ts(facts["source_retrieved_at"], "source_retrieved_at")).total_seconds() / 3600
         facts["source_age_hours"] = dstr(Decimal(str(round(age, 6))))
@@ -159,7 +324,8 @@ def evaluate_control(c: CmpControl, facts: dict, as_of: datetime, input_reasons:
             out.update(status="NOT_APPLICABLE", reasons=["scope predicate FALSE"])
             return out
         if scope == dsl.UNKNOWN:
-            out.update(status="UNKNOWN", reasons=["scope cannot be decided: required context missing (e.g. entity/client classification)"])
+            out.update(status="UNKNOWN", reasons=["scope cannot be decided: required context missing (e.g. entity/client classification)",
+                                                  *_relevant(input_reasons, c)])  # say WHY the input is missing, not only that it is
             return out
         if rs.get("unknown"):
             out.update(status="UNKNOWN", reasons=["RULE_APPLICABILITY_UNKNOWN per regulatory resolution"])
@@ -214,7 +380,7 @@ def _rule_state(session, tenant_id, c: CmpControl, ctx: dict, as_of: datetime, r
     app = next((x for x in r.get("applicable", []) if x.get("rule_key") == key), None)
     if app and int(app.get("version", c.rule_version)) != c.rule_version:
         return {"stale_control": True}, f"STALE (active v{app['version']} vs control v{c.rule_version})"
-    return {}, "VERIFIED" if app else "NOT_LISTED_AS_APPLICABLE"
+    return ({"rule_id": app["rule_id"]} if app and app.get("rule_id") else {}), ("VERIFIED" if app else "NOT_LISTED_AS_APPLICABLE")
 
 
 def active_waiver(session, tenant_id, control_key, subject_id, as_of):
@@ -223,11 +389,12 @@ def active_waiver(session, tenant_id, control_key, subject_id, as_of):
         CmpWaiver.status == "ACTIVE", CmpWaiver.valid_from <= as_of, CmpWaiver.valid_to > as_of)).scalars().first()
 
 
-def _ev(session, tenant_id, actor, action, entity_type, entity_id, rev, cid, payload, effective_at=None, rationale=None, inputs=None):
+def _ev(session, tenant_id, actor, action, entity_type, entity_id, rev, cid, payload, effective_at=None, rationale=None, inputs=None,
+        output_hash=None):
     services.call("evidence.append", session, tenant_id, engine="compliance", action=action, actor_id=actor["id"],
                   actor_type=actor["type"], actor_role=actor.get("role"), entity_type=entity_type, entity_id=entity_id,
                   entity_revision=rev, correlation_id=cid, effective_at=effective_at, payload=payload, rationale=rationale,
-                  input_hashes=inputs or [])
+                  input_hashes=inputs or [], output_hash=output_hash)
 
 
 def evaluation_out(e: CmpEvaluation) -> dict:
@@ -237,7 +404,9 @@ def evaluation_out(e: CmpEvaluation) -> dict:
             "limit": e.limit_value, "gap": e.gap, "unit": e.unit, "as_of": e.as_of.isoformat(), "snapshot_id": e.snapshot_id,
             "rule_set_hash": e.rule_set_hash, "margin_result_id": e.margin_result_id, "allocation_id": e.allocation_id,
             "facts": e.facts, "fact_provenance": e.fact_provenance, "waiver_id": e.waiver_id, "case_id": e.case_id,
-            "is_recheck": e.is_recheck, "created_at": e.created_at.isoformat(), "correlation_id": e.correlation_id}
+            "is_recheck": e.is_recheck, "created_at": e.created_at.isoformat(), "correlation_id": e.correlation_id,
+            "hypothetical": bool((e.trace or {}).get("hypothetical")),
+            "official": not bool((e.trace or {}).get("hypothetical"))}
 
 
 def case_out(c: CmpCase) -> dict:
@@ -248,7 +417,8 @@ def case_out(c: CmpCase) -> dict:
             "reopen_count": c.reopen_count, "margin_result_id": c.margin_result_id, "allocation_id": c.allocation_id,
             "first_evaluation_id": c.first_evaluation_id, "last_evaluation_id": c.last_evaluation_id, "remediations": c.remediations,
             "pending_dismissal": c.pending_dismissal, "last_recheck": c.last_recheck, "waiver_id": c.waiver_id,
-            "resolution": c.resolution, "watchlist": c.watchlist, "revision": c.revision, "provenance": c.provenance}
+            "resolution": c.resolution, "watchlist": c.watchlist, "revision": c.revision, "provenance": c.provenance,
+            "hypothetical": bool((c.eval_context or {}).get("hypothetical"))}
 
 
 def add_case_event(session, tenant_id, case_id, event_type, actor_id, *, frm=None, to=None, comment=None, data=None, as_of=None):
@@ -268,26 +438,37 @@ def open_or_update_case(session, tenant_id: str, ev: CmpEvaluation, actor: dict,
                            data={"evaluation_id": ev.evaluation_id})
         return None
     key = _okey(ev)
-    c = session.execute(select(CmpCase).where(CmpCase.tenant_id == tenant_id, CmpCase.occurrence_key == key)).scalar_one_or_none()
+    cq = select(CmpCase).where(CmpCase.tenant_id == tenant_id, CmpCase.occurrence_key == key)
+    # lock + refresh before read-modify-write: concurrent recurrences must neither lose counts nor duplicate the case
+    c = session.execute(lock_for_update(cq).execution_options(populate_existing=True)).scalar_one_or_none()
     sev = ev.severity
     wv = active_waiver(session, tenant_id, ev.control_key, ev.subject_id, ev.as_of)
+    created_case = False
     if c is None:
         ctrl = session.execute(select(CmpControl).where(CmpControl.control_id == ev.control_id)).scalar_one()
         c = CmpCase(tenant_id=tenant_id, case_id=new_id(), occurrence_key=key,
                     kind="CONTROL_BREACH" if ev.status in ("FAIL", "CONFLICT") else "DATA_GAP", control_key=ev.control_key,
                     rule_version=ev.rule_version, family=ctrl.family, subject_id=ev.subject_id, market_type=ev.market_type,
-                    title=f"{ev.control_key} {ev.status} for {ev.subject_id}", state="OPEN", severity=sev, last_status=ev.status,
+                    title=f"{'[HYPOTHETICAL] ' if (ev.trace or {}).get('hypothetical') else ''}{ev.control_key} {ev.status} for {ev.subject_id}", state="OPEN", severity=sev, last_status=ev.status,
                     opened_as_of=ev.as_of, last_as_of=ev.as_of, due_at=ev.as_of + timedelta(hours=SLA_HOURS[sev]),
                     first_evaluation_id=ev.evaluation_id, last_evaluation_id=ev.evaluation_id, margin_result_id=ev.margin_result_id,
-                    allocation_id=ev.allocation_id, eval_context=eval_context or {}, waiver_id=wv.waiver_id if wv else None,
+                    allocation_id=ev.allocation_id, eval_context={**(eval_context or {}), "hypothetical": bool((ev.trace or {}).get("hypothetical"))},
+                    waiver_id=wv.waiver_id if wv else None,
                     provenance="SYNTHETIC", source_ref=f"control:{ev.control_key}")
-        session.add(c)
-        session.flush()
+        try:
+            with session.begin_nested():  # two first occurrences race: the loser falls through to the update path below
+                session.add(c)
+                session.flush()
+            created_case = True
+        except IntegrityError:
+            c = session.execute(lock_for_update(cq).execution_options(populate_existing=True)).scalar_one()
+    if created_case:
         add_case_event(session, tenant_id, c.case_id, "OPENED", actor["id"], to="OPEN", as_of=ev.as_of,
                        data={"evaluation_id": ev.evaluation_id, "status": ev.status, "gap": ev.gap, "unit": ev.unit})
         _ev(session, tenant_id, actor, "CASE_OPENED", "case", c.case_id, c.revision, ev.correlation_id,
             {"control_key": ev.control_key, "subject_id": ev.subject_id, "status": ev.status, "gap": ev.gap, "unit": ev.unit,
-             "evaluation_id": ev.evaluation_id}, effective_at=ev.as_of, inputs=[ev.facts_hash])
+             "evaluation_id": ev.evaluation_id, "parents": [{"entity_type": "control_evaluation", "entity_id": ev.evaluation_id}]},
+            effective_at=ev.as_of, inputs=[ev.facts_hash])
         emit(session, event_type="CaseOpened", tenant_id=tenant_id, correlation_id=ev.correlation_id, aggregate_id=c.case_id,
              actor_id=actor["id"], actor_type=actor["type"], payload={"control_key": ev.control_key, "subject_id": ev.subject_id},
              effective_at=ev.as_of)
@@ -313,7 +494,8 @@ def open_or_update_case(session, tenant_id: str, ev: CmpEvaluation, actor: dict,
         c.revision += 1
         c.updated_at = datetime.now(UTC)
         _ev(session, tenant_id, actor, "CASE_UPDATED", "case", c.case_id, c.revision, ev.correlation_id,
-            {"occurrence_count": c.occurrence_count, "state": c.state, "evaluation_id": ev.evaluation_id}, effective_at=ev.as_of)
+            {"occurrence_count": c.occurrence_count, "state": c.state, "evaluation_id": ev.evaluation_id,
+             "parents": [{"entity_type": "control_evaluation", "entity_id": ev.evaluation_id}]}, effective_at=ev.as_of)
         emit(session, event_type="CaseUpdated", tenant_id=tenant_id, correlation_id=ev.correlation_id, aggregate_id=c.case_id,
              aggregate_revision=c.revision, actor_id=actor["id"], actor_type=actor["type"], payload={"state": c.state}, effective_at=ev.as_of)
     ev.case_id = c.case_id
@@ -322,39 +504,93 @@ def open_or_update_case(session, tenant_id: str, ev: CmpEvaluation, actor: dict,
 
 
 def _okey(ev: CmpEvaluation) -> str:
-    return f"{ev.control_key}|{ev.subject_id}|r{ev.rule_version}"
+    h = "|HYP" if (ev.trace or {}).get("hypothetical") else ""
+    return f"{ev.control_key}|{ev.subject_id}|r{ev.rule_version}{h}"
+
+
+def outcome_hash(res: dict) -> str:
+    """Canonical BUSINESS hash of a control outcome: excludes ids, timestamps and audit sequence (spec E03)."""
+    return content_hash({k: res.get(k) for k in ("status", "reasons", "measured", "limit", "gap", "unit")})
+
+
+def _parents(ev: "CmpEvaluation", rstate: dict) -> list[dict]:
+    out = []
+    if ev.margin_result_id:
+        out.append({"entity_type": "risk_result", "entity_id": ev.margin_result_id})
+    if ev.allocation_id:
+        out.append({"entity_type": "allocation_proposal", "entity_id": ev.allocation_id})
+    if rstate.get("rule_id"):
+        out.append({"entity_type": "reg_rule", "entity_id": rstate["rule_id"]})
+    return out
 
 
 def run_control(session, tenant_id, c: CmpControl, ctx, facts, prov, input_reasons, as_of, snapshot_id, rule_set_hash,
                 margin_result_id, allocation_id, cid, actor, *, is_recheck=False) -> tuple[CmpEvaluation, bool]:
-    """Evaluate + persist (idempotent on eval_key). Returns (evaluation, created)."""
+    """Evaluate + persist (idempotent on eval_key, race-safe). Returns (evaluation, created)."""
     rstate, rcur = _rule_state(session, tenant_id, c, {k: ctx.get(k) for k in ("market_type", "venue", "jurisdiction", "account_id", "currency")}, as_of, rule_set_hash)
     res = evaluate_control(c, facts, as_of, input_reasons, rstate)
     facts_hash = content_hash(facts)
     ekey = content_hash({"c": c.control_key, "v": c.rule_version, "s": ctx["subject_id"], "snap": snapshot_id, "as_of": as_of,
                          "f": facts_hash, "m": margin_result_id, "a": allocation_id, "rs": rule_set_hash, "rc": is_recheck})
-    existing = session.execute(select(CmpEvaluation).where(CmpEvaluation.tenant_id == tenant_id, CmpEvaluation.eval_key == ekey)).scalar_one_or_none()
+    q = select(CmpEvaluation).where(CmpEvaluation.tenant_id == tenant_id, CmpEvaluation.eval_key == ekey)
+    existing = session.execute(q).scalar_one_or_none()
     if existing:
         return existing, False
     wv = active_waiver(session, tenant_id, c.control_key, ctx["subject_id"], as_of) if res["status"] in CASE_STATUSES else None
+    relevant = _relevant(input_reasons, c)
     ev = CmpEvaluation(
         tenant_id=tenant_id, evaluation_id=new_id(), eval_key=ekey, control_id=c.control_id, control_key=c.control_key,
         rule_key=c.rule_key, rule_version=c.rule_version, rule_hash=c.rule_hash, subject_type="ACCOUNT" if ctx.get("account_id") else "NETTING_SET",
         subject_id=ctx["subject_id"], market_type=ctx["market_type"], venue=ctx.get("venue"), status=res["status"],
         severity=severity_for(c.severity, res["status"]), reasons=res["reasons"],
-        trace={**res["trace"], "rule_currency": rcur, "control_authority": c.authority_type, "rule_hash": c.rule_hash},
+        trace={**res["trace"], "rule_currency": rcur, "control_authority": c.authority_type, "rule_hash": c.rule_hash,
+               # persisted so a read-only replay can re-run the pure evaluation from stored inputs alone
+               "replay_inputs": {"input_reasons": relevant, "rule_state": rstate},
+               "hypothetical": bool(facts.get("hypothetical"))},
         measured=res["measured"], limit_value=res["limit"], gap=res["gap"], unit=res["unit"], as_of=as_of, snapshot_id=snapshot_id,
         rule_set_hash=rule_set_hash, margin_result_id=margin_result_id, allocation_id=allocation_id, facts=facts,
         fact_provenance=prov, facts_hash=facts_hash, waiver_id=wv.waiver_id if wv else None, is_recheck=is_recheck,
         correlation_id=cid, provenance="SYNTHETIC", source_ref=f"control:{c.control_key}")
-    session.add(ev)
-    session.flush()
-    _ev(session, tenant_id, actor, "CONTROL_EVALUATED", "evaluation", ev.evaluation_id, 1, cid,
+    try:
+        with session.begin_nested():  # a concurrent identical evaluation loses the unique-key race and is treated as a duplicate
+            session.add(ev)
+            session.flush()
+    except IntegrityError:
+        won = session.execute(q.execution_options(populate_existing=True)).scalar_one_or_none()
+        if won is None:
+            raise
+        return won, False
+    oh = outcome_hash(res)
+    _ev(session, tenant_id, actor, "CONTROL_EVALUATED", "control_evaluation", ev.evaluation_id, 1, cid,
         {"control_key": c.control_key, "rule_version": c.rule_version, "subject_id": ev.subject_id, "status": ev.status,
-         "gap": ev.gap, "unit": ev.unit, "waiver_id": ev.waiver_id, "recheck": is_recheck}, effective_at=as_of, inputs=[facts_hash, c.rule_hash])
+         "gap": ev.gap, "unit": ev.unit, "waiver_id": ev.waiver_id, "recheck": is_recheck, "parents": _parents(ev, rstate),
+         "hypothetical": bool(facts.get("hypothetical")),
+         "replay": {"replayer": "replay.compliance", "engine_version": ENGINE_VERSION, "method_version": METHOD_VERSION,
+                    "business_hash": oh, "inputs": {"evaluation_id": ev.evaluation_id}}},
+        effective_at=as_of, inputs=[facts_hash, c.rule_hash], output_hash=oh)
     emit(session, event_type="ControlEvaluated", tenant_id=tenant_id, correlation_id=cid, aggregate_id=ev.evaluation_id,
          actor_id=actor["id"], actor_type=actor["type"], payload={"control_key": c.control_key, "status": ev.status}, effective_at=as_of)
     return ev, True
+
+
+def replay_compliance(session, tenant_id: str, spec: dict) -> dict:
+    """replay.compliance (evidence replay contract): re-run the PURE evaluation from the persisted control definition, facts,
+    stored input reasons and rule state. Read-only. Returns the canonical business hash for comparison with the recorded one."""
+    from app.core.errors import NotFound
+    inputs = (spec or {}).get("inputs") or {}
+    ev = session.execute(select(CmpEvaluation).where(CmpEvaluation.tenant_id == tenant_id,
+                                                      CmpEvaluation.evaluation_id == inputs.get("evaluation_id"))).scalar_one_or_none()
+    if ev is None:
+        raise NotFound("Evaluation not found for replay")
+    c = session.execute(select(CmpControl).where(CmpControl.tenant_id == tenant_id, CmpControl.control_id == ev.control_id)).scalar_one_or_none()
+    if c is None:
+        raise NotFound("Control revision not found for replay")
+    ri = (ev.trace or {}).get("replay_inputs") or {}
+    res = evaluate_control(c, ev.facts, ev.as_of, list(ri.get("input_reasons", [])), ri.get("rule_state") or {})
+    return {"engine_version": ENGINE_VERSION, "method_version": METHOD_VERSION, "business_hash": outcome_hash(res)}
+
+
+services.register("replay.compliance", replay_compliance)
 
 
 def triggered_families(facts: dict, margin_result_id, allocation_id) -> set[str]:
@@ -369,6 +605,12 @@ def triggered_families(facts: dict, margin_result_id, allocation_id) -> set[str]
         fam.add("FRESHNESS")
     if "terms_status" in facts:
         fam.add("AGREEMENT")
+    if allocation_id:
+        fam.add("COLLATERAL_CONCENTRATION")
+    if "settlement_deadline" in facts or "deadline_collateral_inr" in facts or "deadline_collateral_usd" in facts:
+        fam.add("SETTLEMENT_DEADLINE")
+    if "report_missing_fields" in facts:
+        fam.add("REPORTING_COMPLETENESS")
     return fam
 
 
@@ -386,13 +628,24 @@ def evaluate(session, tenant_id: str, context: dict, snapshot_id, rule_set_hash,
     as_of = ts(ctx["as_of"])
     cid = correlation_id or new_id()
     actor = {"id": actor_id, "type": actor_type, "role": actor_role}
-    fct, prov, reasons = gather_facts(session, tenant_id, ctx, margin_result_id, allocation_id, facts)
-    evals, cases, created_n = [], [], 0
     keys = context.get("control_keys")
-    triggered = triggered_families(fct, margin_result_id, allocation_id)
+    fetch = set(context.get("families") or ())
+    if context.get("full_sweep") or keys is not None:
+        fetch |= ALL_FAMILIES
+    if allocation_id:
+        fetch.add("COLLATERAL_CONCENTRATION")
+    if ctx.get("settlement_deadline"):
+        fetch.add("SETTLEMENT_DEADLINE")
+    fct, prov, reasons = gather_facts(session, tenant_id, ctx, margin_result_id, allocation_id, facts, fetch)
+    evals, cases, created_n = [], [], 0
+    triggered = triggered_families(fct, margin_result_id, allocation_id) | (fetch & ALL_FAMILIES if context.get("families") else set())
+    if ctx.get("settlement_deadline"):
+        triggered.add("SETTLEMENT_DEADLINE")  # asked for explicitly: an unavailable input must surface as UNKNOWN, not silence
     for c in active_controls(session, tenant_id, as_of):
         if c.support_status != "SUPPORTED":
             continue  # reported as UNSUPPORTED in coverage; never evaluated, never PASS
+        if context.get("frequency") and c.frequency != context["frequency"]:
+            continue  # scheduled sweep: only controls of that frequency
         if keys is not None:
             if c.control_key not in keys:
                 continue

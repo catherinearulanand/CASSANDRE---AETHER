@@ -14,8 +14,9 @@ from app.core.idempotency import run_idempotent
 from app.engines.compliance import cases as C
 from app.engines.compliance import controls as K
 from app.engines.compliance import engine as E
+from app.engines.compliance import schedule as SCH
 from app.engines.compliance import surv_service as SV
-from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpWaiver
+from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpJob, CmpWaiver
 
 router = APIRouter()
 WRITE = ("maker", "compliance_officer", "tenant_admin")
@@ -87,6 +88,21 @@ class ControlBody(BaseModel):
 
 class SurvBody(BaseModel):
     seed: int = 42
+
+
+class SweepBody(BaseModel):
+    as_of: str
+    population: list[dict] | None = None
+
+
+class SupersedeBody(BaseModel):
+    effective_from: str
+    reason: str
+    condition: dict | None = None
+    scope: dict | None = None
+    params: dict | None = None
+    severity: str | None = Field(default=None, pattern="^(LOW|MEDIUM|HIGH|CRITICAL)$")
+    rule_key: str | None = None
 
 
 class ModelStatusBody(BaseModel):
@@ -253,3 +269,52 @@ def get_model(model_id: str, db: Session = Depends(get_db), p: Principal = Depen
 @router.post("/models/{model_id}/status")
 def model_status(model_id: str, body: ModelStatusBody, db: Session = Depends(get_db), p: Principal = Depends(require_roles("compliance_officer", "tenant_admin"))):
     return SV.model_out(SV.set_model_status(db, p.tenant_id, model_id, body.status, C.actor_of(p)))
+
+
+# ------------------------------------------------------------------ control supersession (G23) and scheduled evaluation (S01)
+@router.post("/controls/{control_key}/supersede", status_code=201)
+def supersede_control(control_key: str, body: SupersedeBody, db: Session = Depends(get_db),
+                      p: Principal = Depends(require_roles("compliance_officer", "tenant_admin")), idempotency_key: str | None = IDEM):
+    """New immutable control revision effective from `effective_from`; only subjects previously evaluated by THIS control are
+    re-evaluated (others untouched); history preserved."""
+    def make():
+        eff = E.ts(body.effective_from, "effective_from")
+        new_def = {k: v for k, v in body.model_dump().items() if k in ("condition", "scope", "params", "severity", "rule_key") and v is not None}
+        if "condition" in new_def or "scope" in new_def:
+            probe = {"control_key": control_key, "family": "X", "title": "x", "rule_key": "x", "authority_type": "SYNTHETIC_POLICY",
+                     "scope": new_def.get("scope", {"eq": ["market_type", "OTC"]}), "condition": new_def.get("condition", {"eq": ["market_type", "OTC"]})}
+            K.validate_definition(probe)
+        new, old = K.supersede_control(db, p.tenant_id, control_key, new_def, eff)
+        actor = C.actor_of(p)
+        E._ev(db, p.tenant_id, actor, "CONTROL_SUPERSEDED", "control", new.control_id, new.rule_version, new.control_id,
+              {"control_key": control_key, "old_version": old.rule_version, "new_version": new.rule_version, "new_rule_hash": new.rule_hash,
+               "old_rule_hash": old.rule_hash, "effective_from": eff.isoformat()}, effective_at=eff, rationale=body.reason)
+        re = K.reevaluate_affected(db, p.tenant_id, control_key, eff, actor)
+        return {"control_key": control_key, "old_version": old.rule_version, "new_version": new.rule_version, "rule_hash": new.rule_hash,
+                "effective_from": eff.isoformat(), "re_evaluation": re}
+    return run_idempotent(db, p.tenant_id, idempotency_key, f"compliance.supersede.{control_key}", body.model_dump(), make)[0]
+
+
+@router.post("/schedule/run", status_code=201)
+def schedule_run(body: SweepBody, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*WRITE)), idempotency_key: str | None = IDEM):
+    return run_idempotent(db, p.tenant_id, idempotency_key, "compliance.sweep", body.model_dump(),
+                          lambda: SCH.run_sweep(db, p.tenant_id, E.ts(body.as_of), body.population, C.actor_of(p)))[0]
+
+
+@router.get("/schedule")
+def schedule_get(as_of: str, db: Session = Depends(get_db), p: Principal = Depends(current_principal)):
+    """Read-only: watermark + missed slots against the supplied business as_of."""
+    st = SCH.schedule_status(db, p.tenant_id, E.ts(as_of))
+    jobs = db.execute(select(CmpJob).where(CmpJob.tenant_id == p.tenant_id, CmpJob.kind.in_([SCH.SWEEP, SCH.MISSED]))
+                      .order_by(CmpJob.started_at.desc()).limit(30)).scalars().all()
+    return {**st, "jobs": [{"job_id": j.job_id, "kind": j.kind, "status": j.status, "slot": j.detail.get("slot"),
+                            "watermark_as_of": j.watermark_as_of.isoformat() if j.watermark_as_of else None,
+                            "subjects": j.detail.get("subjects"), "evaluations": j.detail.get("evaluations"),
+                            "status_counts": j.detail.get("status_counts"), "error": j.detail.get("error")} for j in jobs]}
+
+
+@router.post("/schedule/check", status_code=201)
+def schedule_check(body: SweepBody, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*WRITE)), idempotency_key: str | None = IDEM):
+    """Detect missed slots and record each newly missed one as evidence (once)."""
+    return run_idempotent(db, p.tenant_id, idempotency_key, "compliance.sched-check", body.model_dump(),
+                          lambda: SCH.schedule_status(db, p.tenant_id, E.ts(body.as_of), record=True, actor=C.actor_of(p)))[0]

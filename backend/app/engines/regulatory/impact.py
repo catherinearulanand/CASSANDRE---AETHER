@@ -15,7 +15,7 @@ from app.core.canonical import domain_hash
 from app.core.errors import ApiError, NotFound, ValidationFailed
 from app.core.money import NumericError, dstr, to_decimal
 from app.db.base import new_id
-from app.engines.regulatory import registry
+from app.engines.regulatory import registry, replay
 from app.engines.regulatory.models import RegImpactRun
 from app.engines.regulatory.resolve import resolve_rules
 
@@ -42,6 +42,29 @@ def _margin(db, tenant_id, acct, rule_set_hash, as_of, known_at):
         return None, f"risk result {res.get('status')}: {'; '.join(res.get('blocking_reasons', [])) or 'no reason supplied'}"
     amt, ccy = _amt(res, "required_amount")
     return {"amount": amt, "currency": ccy, "result_id": res.get("result_id"), "result_hash": res.get("result_hash")}, None
+
+
+def _feasibility(db, tenant_id: str, acct: dict, row: dict, rule_set_hash: str) -> dict:
+    """Ask ATLAS (A4) whether the HYPOTHETICAL requirement can be covered. Contract-safe use of collateral.optimise:
+    the margin result is hypothetical, so ATLAS flags the proposal hypothetical and can never approve/reserve it.
+    This writes a hypothetical proposal row in A4 (visible, labelled); it moves no asset. Never fabricates a result."""
+    need = {k: acct.get(k) for k in ("inventory_snapshot_id", "deadline", "horizon_days")}
+    missing = [k for k, v in need.items() if v in (None, "")]
+    if missing:
+        return {"status": "NOT_EVALUATED", "reason": f"missing account fields: {', '.join(missing)}"}
+    if row.get("hypothetical_shortfall") in (None, "0"):
+        return {"status": "NOT_REQUIRED" if row.get("hypothetical_shortfall") == "0" else "NOT_EVALUATED",
+                "reason": "no shortfall under the counterfactual" if row.get("hypothetical_shortfall") == "0" else "shortfall unknown (posted coverage unavailable)"}
+    try:
+        prop = services.call("collateral.optimise", db, tenant_id, row["hypothetical_result_id"], need["inventory_snapshot_id"],
+                             rule_set_hash, acct.get("terms_hash"), need["deadline"], int(need["horizon_days"]),
+                             actor_id="regulatory-impact", actor_type="SERVICE")
+    except ApiError as exc:
+        return {"status": "NOT_EVALUATED", "reason": f"{exc.code}: {exc.message}"}
+    return {"status": "EVALUATED", "solver_status": prop.get("solver_status"), "proposal_state": prop.get("state"),
+            "proposal_id": prop.get("proposal_id"), "required_coverage": prop.get("required_coverage"), "residual": prop.get("residual"),
+            "objective": prop.get("objective"), "currency": prop.get("currency"), "hypothetical": bool(prop.get("hypothetical")),
+            "note": "HYPOTHETICAL proposal: cannot be approved or reserved; no asset moves"}
 
 
 def run_impact(db, actor: Principal, body: dict, corr: str | None = None) -> RegImpactRun:
@@ -96,7 +119,8 @@ def run_impact(db, actor: Principal, body: dict, corr: str | None = None) -> Reg
             continue
         ccy = b["currency"]
         row |= {"status": "COMPUTED", "currency": ccy, "baseline_required": dstr(b["amount"]), "hypothetical_required": dstr(h["amount"]),
-                "delta_required": dstr(h["amount"] - b["amount"]), "baseline_result_id": b["result_id"], "hypothetical_result_id": h["result_id"]}
+                "delta_required": dstr(h["amount"] - b["amount"]), "baseline_result_id": b["result_id"], "hypothetical_result_id": h["result_id"],
+                "baseline_result_hash": b["result_hash"], "hypothetical_result_hash": h["result_hash"]}
         try:
             cov = services.call("collateral.coverage", db, actor.tenant_id, a.get("account_id"), as_of)
             ep, ec = _amt(cov, "eligible_posted")
@@ -107,6 +131,8 @@ def run_impact(db, actor: Principal, body: dict, corr: str | None = None) -> Reg
                     "coverage_note": "eligible POSTED collateral only; proposals are not counted"}
         except ApiError as exc:
             row |= {"eligible_posted": None, "hypothetical_shortfall": None, "coverage_note": f"shortfall not computed: {exc.code}: {exc.message}"}
+        if body.get("include_feasibility"):
+            row["feasibility"] = _feasibility(db, actor.tenant_id, a, row, hyp["rule_set_hash"])
         t = totals.setdefault(ccy, {"baseline_required": Decimal(0), "hypothetical_required": Decimal(0), "delta_required": Decimal(0), "accounts": 0})
         t["baseline_required"] += b["amount"]
         t["hypothetical_required"] += h["amount"]
@@ -118,18 +144,25 @@ def run_impact(db, actor: Principal, body: dict, corr: str | None = None) -> Reg
                "changed_rule_keys": sorted(changed_keys), "official": False, "publishes_compliance_status": False,
                "affected_controls": {"derived_from": "rule keys changed by the counterfactual", "keys": sorted(changed_keys),
                                      "note": "compliance.evaluate is deliberately NOT invoked for hypothetical rule sets"},
-               "liquidity_feasibility": "NOT_EVALUATED (collateral.optimise what-if is not wired from regulatory impact in this build)",
+               "liquidity_feasibility": ("EVALUATED via collateral.optimise per account (HYPOTHETICAL proposals; see row.feasibility)"
+                                         if body.get("include_feasibility") else "NOT_EVALUATED (opt-in: set include_feasibility)"),
                "assumptions": ["identical pinned snapshots for baseline and counterfactual", "aggregation only within a single currency",
                                "unknown-scope rules are counted, never treated as applicable or as zero"]}
     run = RegImpactRun(impact_id=new_id(), tenant_id=actor.tenant_id, status=status, hypothetical=True, created_by=actor.user_id,
-                       params={"as_of": as_of.isoformat(), "known_at": known_at.isoformat() if known_at else None, "hypothetical_rule_ids": hyp_ids,
+                       params={"as_of": as_of.isoformat(), "known_at": known_at.isoformat() if known_at else None, "hypothetical_rule_ids": hyp_ids, "include_feasibility": bool(body.get("include_feasibility")),
                                "accounts": [{k: v for k, v in a.items()} for a in accounts]}, results=results, provenance="SYNTHETIC")
     db.add(run)
     db.flush()
+    parents = ([{"entity_type": "reg_rule", "entity_id": i} for i in hyp_ids]
+               + [{"entity_type": "rule_set", "entity_id": h} for h in sorted({r["baseline_rule_set_hash"] for r in rows} | {r["hypothetical_rule_set_hash"] for r in rows})]
+               + [{"entity_type": "risk_result", "entity_id": r[k]} for r in rows for k in ("baseline_result_id", "hypothetical_result_id") if r.get(k)]
+               + [{"entity_type": "col_proposal", "entity_id": r["feasibility"]["proposal_id"]} for r in rows
+                  if (r.get("feasibility") or {}).get("proposal_id")])
     registry._ev(db, actor, "IMPACT_RUN_COMPLETED", "reg_impact_run", run.impact_id, 1, corr, source_mode="REPLAY",
                  effective_at=as_of, input_hashes=sorted({r["baseline_rule_set_hash"] for r in rows} | {r["hypothetical_rule_set_hash"] for r in rows}),
                  output_hash=domain_hash("aether.reg.impact.v1", results), rationale="HYPOTHETICAL counterfactual; not an operational compliance status",
-                 payload={"status": status, "counts": counts, "hypothetical_rule_ids": hyp_ids})
+                 payload={"status": status, "counts": counts, "hypothetical_rule_ids": hyp_ids, "parents": parents,
+                          "replay": replay.impact_replay_spec(run.impact_id, as_of, known_at, hyp_ids, accounts, rows)})
     return run
 
 

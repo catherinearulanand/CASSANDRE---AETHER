@@ -5,8 +5,8 @@ import { EmptyState, ErrorState, ProvenanceBadge, StatusChip } from "@/component
 import { useLoad } from "./useLoad";
 import type { EventsPage, EvEventOut, VerifyResult } from "./types";
 
-interface Filters { actor_id: string; action: string; engine: string; correlation_id: string; entity_id: string }
-const EMPTY: Filters = { actor_id: "", action: "", engine: "", correlation_id: "", entity_id: "" };
+interface Filters { actor_id: string; action: string; engine: string; correlation_id: string; entity_id: string; sequence: string }
+const EMPTY: Filters = { actor_id: "", action: "", engine: "", correlation_id: "", entity_id: "", sequence: "" };
 
 function qs(f: Filters, cursor: number | null) {
   const p = new URLSearchParams();
@@ -16,13 +16,16 @@ function qs(f: Filters, cursor: number | null) {
   return p.toString();
 }
 
-export default function AuditExplorer({ initialCorrelation }: { initialCorrelation?: string }) {
-  const [draft, setDraft] = useState<Filters>({ ...EMPTY, correlation_id: initialCorrelation ?? "" });
-  const [filters, setFilters] = useState<Filters>({ ...EMPTY, correlation_id: initialCorrelation ?? "" });
+export default function AuditExplorer({ initialCorrelation, initialSeq }: { initialCorrelation?: string; initialSeq?: string }) {
+  const start: Filters = { ...EMPTY, correlation_id: initialCorrelation ?? "", sequence: initialSeq ?? "" };
+  const [draft, setDraft] = useState<Filters>(start);
+  const [filters, setFilters] = useState<Filters>(start);
   const [cursors, setCursors] = useState<(number | null)[]>([null]); // server cursor stack for paging back
   const cursor = cursors[cursors.length - 1];
   const { data, error, loading } = useLoad<EventsPage>(s => api(`/evidence/events?${qs(filters, cursor)}`, { signal: s }), [filters, cursor]);
   const [sel, setSel] = useState<EvEventOut | null>(null);
+  const autoOpen = initialSeq && data && data.items.length === 1 && sel === null && filters.sequence === initialSeq ? data.items[0] : null;
+  if (autoOpen) setTimeout(() => setSel(autoOpen), 0);
   const [ver, setVer] = useState<VerifyResult | null>(null);
   const [verErr, setVerErr] = useState<Error | null>(null);
   const [verBusy, setVerBusy] = useState(false);
@@ -55,7 +58,7 @@ export default function AuditExplorer({ initialCorrelation }: { initialCorrelati
 
       <form className="card" onSubmit={apply} aria-label="Filter audit events">
         <div className="row" style={{ alignItems: "end" }}>
-          {f("actor_id", "Actor ID")}{f("action", "Action")}{f("engine", "Engine")}{f("correlation_id", "Correlation ID")}{f("entity_id", "Entity ID")}
+          {f("actor_id", "Actor ID")}{f("action", "Action")}{f("engine", "Engine")}{f("correlation_id", "Correlation ID")}{f("entity_id", "Entity ID")}{f("sequence", "Sequence")}
           <button className="primary" type="submit">Search</button>
           <button type="button" onClick={() => { setDraft(EMPTY); setFilters(EMPTY); setCursors([null]); }}>Clear</button>
         </div>

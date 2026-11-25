@@ -144,12 +144,20 @@ def test_coverage_reports_unsupported_and_unevaluated_not_a_percentage(db, tenan
     run(db, tenant, margin_result_id="MR-1")
     cov = C.coverage(db, tenant, None)
     c = cov["coverage"]
-    assert c["registered"] == 9 and c["supported"] == 6 and c["unsupported"] == 3
-    assert c["supported_and_evaluated"] == 2 and c["supported_not_evaluated"] == 4
+    # round 2: all nine round-1 controls have inputs via contract v1.1 (+1 IFSC settlement control) => 10 supported, 0 unsupported
+    assert c["registered"] == 10 and c["supported"] == 10 and c["unsupported"] == 0
+    assert c["supported_and_evaluated"] == 2 and c["supported_not_evaluated"] == 8
     assert c["latest_status_counts"]["FAIL"] == 1 and "percentage" in c["note"].lower()
     assert not any("percent" in k for k in c)
-    unsup = [x for x in cov["controls"] if x["support_status"] == "UNSUPPORTED"]
-    assert len(unsup) == 3 and all(x["unsupported_reason"] for x in unsup)
+    # the UNSUPPORTED mechanism still works: a control without inputs is listed with its reason and is never evaluated/counted as passing
+    from app.engines.compliance.controls import register_control
+    register_control(db, tenant, {"control_key": "CMP-NEEDS-INPUT", "family": "X", "title": "needs an input nobody provides", "rule_key": "UNSUPPORTED",
+                                  "rule_version": 1, "support_status": "UNSUPPORTED", "unsupported_reason": "no contract provides this input"})
+    db.flush()
+    cov2 = C.coverage(db, tenant, None)
+    unsup = [x for x in cov2["controls"] if x["support_status"] == "UNSUPPORTED"]
+    assert cov2["coverage"]["unsupported"] == 1 and len(unsup) == 1 and unsup[0]["unsupported_reason"]
+    assert all(e["control_key"] != "CMP-NEEDS-INPUT" for e in E.evaluate(db, tenant, {**CTX, "full_sweep": True}, "S-U", "h", margin_result_id="MR-1")["evaluations"])
 
 
 def test_control_compile_gate_rejects_bad_rules(db, tenant):
@@ -209,7 +217,7 @@ def test_input_problems_only_block_controls_that_depend_on_them(db, tenant, up):
         db, tenant, {**CTX, "full_sweep": True}, "S-RG", "h", margin_result_id="MR-X", facts=facts)
     db.commit()
     by = {e["control_key"]: e for e in r["evaluations"]}
-    assert by["CMP-POSLIMIT-ETD"]["status"] == "FAIL" and by["CMP-POSLIMIT-ETD"]["gap"] == "1"
+    assert by["CMP-POSLIMIT-ETD"]["status"] == "FAIL" and by["CMP-POSLIMIT-ETD"]["gap"] == "1", by["CMP-POSLIMIT-ETD"]["reasons"]
     assert by["CMP-COV-ETD-INR"]["status"] == "UNKNOWN" and any("RISK_RESULT_UNAVAILABLE" in x for x in by["CMP-COV-ETD-INR"]["reasons"])
     # without a margin result the collateral lookup is not even attempted
     r2 = E.evaluate(db, tenant, CTX, "S-RG2", "h", facts=facts)

@@ -27,7 +27,7 @@ export interface EligRow {
   fx_haircut_pct: string; concentration_cap_pct: string | null; cap_denominator: string | null; min_rating: string | null;
   max_maturity_years: string | null; field_status: string;
 }
-export interface Readiness { ready_to_freeze: boolean; blocking_reasons: string[]; candidate_bundle_hash: string; required_fields: string[]; unchanged_from_latest_frozen: boolean }
+export interface Readiness { ready_to_freeze: boolean; blocking_reasons: string[]; candidate_bundle_hash: string; required_fields: string[]; unchanged_from_latest_frozen: boolean; pending_approval: Approval | null }
 export interface TermsView { package: PkgSummary; fields: Field[]; readiness: Readiness; eligibility: EligRow[] }
 export interface Approval { approval_id: string; decision: string; target_hash: string; target_revision: number; maker_id: string; expires_at: string }
 export interface Membership { trade_id: string; netting_set_id: string | null; master_id: string | null; status: string; reason: string; declared_master_id: string | null; declared_netting_set_id: string | null }

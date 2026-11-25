@@ -1,0 +1,20 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E04 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E04 to Master MA-EVAL-E04
+Party A: Larch Demo Bank. Party B: Quill Demo Clearing.
+Base Currency: USD.
+Effective Date: 2026-04-01.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Party A: USD 3,000,000.
+(b) Threshold with respect to Party B: USD 2,000,000.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Party A: USD 150,000.
+(b) Minimum Transfer Amount with respect to Party B: USD 150,000.
+A transfer is required only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.
+
+Paragraph 3. Independent Amount.
+(a) Independent Amount with respect to Party A: USD 0.
+(b) Independent Amount with respect to Party B: USD 0.
+
+Paragraph 4. Rounding. Delivery Amounts and Return Amounts are rounded up to the nearest integral multiple of USD 10,000.

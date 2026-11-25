@@ -39,6 +39,10 @@ FIELD_REGISTRY: dict[str, dict] = {
     "position_lots": {"type": "num", "unit": "lots"}, "source_age_hours": {"type": "num", "unit": "hours"},
     "as_of": {"type": "ts"}, "agreement_effective_from": {"type": "ts"}, "agreement_effective_to": {"type": "ts"},
     "positions": {"type": "rows"},
+    # round 2 (contract v1.1): concentration, settlement-deadline and synthetic report-schema controls
+    "concentration_breaches": {"type": "num", "unit": "count"},
+    "deadline_collateral_inr": {"type": "num", "unit": "INR"}, "deadline_collateral_usd": {"type": "num", "unit": "USD"},
+    "report_missing_fields": {"type": "num", "unit": "count"}, "report_format_errors": {"type": "num", "unit": "count"},
 }
 
 

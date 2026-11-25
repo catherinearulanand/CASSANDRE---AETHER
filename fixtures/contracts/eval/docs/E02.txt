@@ -1,0 +1,9 @@
+FICTIONAL EVAL AMENDMENT NO. 2 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: AMD-EVAL-E02 to CSA-EVAL-E01
+Party A: Halcyon Demo Securities. Party B: Juniper Demo Fund.
+Effective Date: 2026-11-01.
+
+This Amendment replaces Paragraph 4 of the Credit Support Annex with effect from the Effective Date.
+(a) Threshold with respect to Halcyon Demo Securities: USD 1,800,000.
+(b) Threshold with respect to Juniper Demo Fund: USD 900,000.
+All other terms remain unchanged.

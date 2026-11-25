@@ -1,11 +1,12 @@
 "use client";
 import Link from "next/link";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { api, ApiError, newKey } from "@/lib/api";
 import { PINNED_AS_OF, useSession } from "@/lib/session";
 import { EmptyState, ErrorState, MetricCard, MoneyDisplay, ProvenanceBadge, StatusChip } from "@/components/ui";
+import { ClearingImport, PositionMetricsCard, ReconStatusCard, VENUE } from "./EtdPanels";
 import {
-  DIRECTION_TEXT, ETD_ACCOUNT, METHOD_FOR, type ClearingFile, type MarginResult, type Methodology, type ResultRow, type Snapshot, type StressOut,
+  DIRECTION_TEXT, ETD_ACCOUNT, METHOD_FOR, type ClearingFile, type MarginResult, type Methodology, type PositionMetrics, type ReconStatus, type ResultRow, type Snapshot, type StressOut, type TermsInfo,
 } from "./types";
 
 type Tone = "ok" | "warn" | "danger" | "info" | "neutral";
@@ -56,6 +57,8 @@ export function ResultSummary({ r }: { r: MarginResult }) {
         <span className="mono faint">result {r.result_id.slice(0, 8)} · hash {r.result_hash.slice(0, 12)}</span>
         <Link href={`/evidence?entity=${r.result_id}`}>Evidence →</Link></div>
       <Badges r={r} />
+      <p className="mono faint" aria-label="Time axes">business as-of {r.as_of} · snapshot data as of {r.snapshot_as_of ?? "n/a (unknown)"}
+        {r.context_used && typeof r.context_used.known_at === "string" ? ` · terms known at ${r.context_used.known_at} (recording time)` : ""}</p>
       {r.status !== "OK" && (
         <div className="state error" role="alert" style={{ marginTop: 12, textAlign: "left" }}>
           <strong>{r.status === "UNSUPPORTED" ? "Unsupported market type" : "Blocked — no authoritative figure is shown"}</strong>
@@ -81,25 +84,32 @@ export function ResultSummary({ r }: { r: MarginResult }) {
 export function RiskDesk({ ctx }: { ctx: RiskCtx }) {
   const { market, snaps, nsets, files, canWrite, result, setResult, setErr, err, results, reload } = ctx;
   const [snap, setSnap] = useState(""); const [ns, setNs] = useState(""); const [held, setHeld] = useState({ A: "0", B: "0" });
-  const [mult, setMult] = useState(""); const [termsInfo, setTermsInfo] = useState<{ status: string; terms_hash: string | null; blocking_reasons: string[] } | null>(null);
+  const [mult, setMult] = useState(""); const [termsInfo, setTermsInfo] = useState<TermsInfo | null>(null);
   const [busy, setBusy] = useState(false);
   useEffect(() => { setSnap(""); setNs(nsets[0] ?? ""); setTermsInfo(null); }, [market, nsets]);
   const isOtc = market === "OTC";
   const relevantSnaps = (snaps ?? []).filter(s => (isOtc ? /QUIET|SHOCK|STALE|G08/.test(s.snapshot_id) : market === "ETD_IFSC" ? s.snapshot_id.includes("IFSC") : s.snapshot_id.includes("ETD")));
 
+  /** Bitemporal: business as-of is pinned; known_at is the RECORDING time at which the approved terms are looked up (server time). */
+  async function resolveTermsNow(): Promise<TermsInfo> {
+    const t = await api<TermsInfo>("/risk/terms/resolve", { method: "POST", body: { netting_set_id: ns, as_of: PINNED_AS_OF } });
+    setTermsInfo(t);
+    return t;
+  }
   async function resolveTerms() {
     setBusy(true);
-    try { setTermsInfo(await api("/risk/terms/resolve", { method: "POST", body: { netting_set_id: ns, as_of: PINNED_AS_OF } })); setErr(null); }
-    catch (e) { setErr(e as ApiError); } finally { setBusy(false); }
+    try { await resolveTermsNow(); setErr(null); } catch (e) { setErr(e as ApiError); } finally { setBusy(false); }
   }
   async function run(e: FormEvent) {
-    e.preventDefault(); setBusy(true);
-    const context: Record<string, unknown> = isOtc
-      ? { market_type: "OTC", netting_set_id: ns, as_of: PINNED_AS_OF, existing_vm_balance: { PARTY_A: held.A, PARTY_B: held.B } }
-      : { market_type: market, account_id: ETD_ACCOUNT[market].account, venue: ETD_ACCOUNT[market].venue, as_of: PINNED_AS_OF, ...(mult ? { hypothetical_margin_multiplier: mult } : {}) };
+    e.preventDefault(); setBusy(true); setResult(null); // clear the previous figure: never show a stale result beside a run in flight
     try {
+      let ti = termsInfo;
+      if (isOtc && (!ti || ti.status !== "RESOLVED")) ti = await resolveTermsNow();  // never calculate against terms the user has not seen resolved
+      const context: Record<string, unknown> = isOtc
+        ? { market_type: "OTC", netting_set_id: ns, as_of: PINNED_AS_OF, known_at: ti?.known_at, existing_vm_balance: { PARTY_A: held.A, PARTY_B: held.B } }
+        : { market_type: market, account_id: ETD_ACCOUNT[market].account, venue: ETD_ACCOUNT[market].venue, as_of: PINNED_AS_OF, ...(mult ? { hypothetical_margin_multiplier: mult } : {}) };
       const r = await api<MarginResult>("/risk/calculate", { method: "POST", idempotencyKey: newKey(),
-        body: { context, snapshot_id: snap || null, terms_hash: isOtc ? termsInfo?.terms_hash ?? null : null, rule_set_hash: null, methodology: METHOD_FOR[market] } });
+        body: { context, snapshot_id: snap || null, terms_hash: isOtc && ti?.status === "RESOLVED" ? ti.terms_hash : null, rule_set_hash: null, methodology: METHOD_FOR[market] } });
       setResult(r); setErr(null); reload();
     } catch (x) { setErr(x as ApiError); } finally { setBusy(false); }
   }
@@ -115,12 +125,12 @@ export function RiskDesk({ ctx }: { ctx: RiskCtx }) {
             {relevantSnaps.length === 0 && <div className="field-error">No snapshot for this market. Pin one via the API.</div>}</div>
           {isOtc ? <>
             <div><label htmlFor="ns">Netting set</label><select id="ns" value={ns} onChange={e => { setNs(e.target.value); setTermsInfo(null); }}>{nsets.map(n => <option key={n}>{n}</option>)}</select></div>
-            <div><label>Existing VM collateral held (explicit; no silent default)</label>
+            <fieldset style={{ border: 0, padding: 0, margin: 0 }}><legend style={{ fontSize: 12, color: "var(--text-2)", marginBottom: 4 }}>Existing VM collateral held (explicit; no silent default)</legend>
               <div className="row"><input aria-label="Held from Party A" value={held.A} onChange={e => setHeld({ ...held, A: e.target.value })} inputMode="decimal" style={{ width: 110 }} />
                 <input aria-label="Held from Party B" value={held.B} onChange={e => setHeld({ ...held, B: e.target.value })} inputMode="decimal" style={{ width: 110 }} /></div>
-              <span className="faint">Party A · Party B ({"USD"})</span></div>
+              <span className="faint">Party A · Party B ({"USD"})</span></fieldset>
           </> : <>
-            <div><label>Account / venue</label><div className="mono">{ETD_ACCOUNT[market].account} · {ETD_ACCOUNT[market].venue}</div></div>
+            <div><span className="label-like" id="acct-l" style={{ display: "block", fontSize: 12, color: "var(--text-2)", marginBottom: 4 }}>Account / venue</span><div className="mono" aria-labelledby="acct-l">{ETD_ACCOUNT[market].account} · {ETD_ACCOUNT[market].venue}</div></div>
             <div><label htmlFor="mult">Hypothetical margin multiplier (optional)</label><input id="mult" value={mult} onChange={e => setMult(e.target.value)} placeholder="e.g. 1.25" inputMode="decimal" />
               <span className="faint">Marked HYPOTHETICAL; never presented as an official rule.</span></div>
           </>}
@@ -129,7 +139,7 @@ export function RiskDesk({ ctx }: { ctx: RiskCtx }) {
           <div className="row" style={{ marginTop: 12 }}>
             <button type="button" onClick={resolveTerms} disabled={busy || !ns}>Resolve approved terms</button>
             {termsInfo && (termsInfo.status === "RESOLVED"
-              ? <StatusChip tone="ok">terms hash {termsInfo.terms_hash?.slice(0, 12)}</StatusChip>
+              ? <><StatusChip tone="ok">terms hash {termsInfo.terms_hash?.slice(0, 12)}</StatusChip><span className="mono faint">known at {termsInfo.known_at} (recording time)</span></>
               : <StatusChip tone="danger">BLOCKED: {termsInfo.blocking_reasons.join("; ") || "terms unavailable"}</StatusChip>)}
           </div>)}
         <div className="row" style={{ marginTop: 16 }}>
@@ -154,16 +164,32 @@ export function RiskDesk({ ctx }: { ctx: RiskCtx }) {
 
 export function Portfolio({ ctx }: { ctx: RiskCtx }) {
   const { result, market, files } = ctx;
-  const etdFiles = files.filter(f => (market === "ETD_IFSC" ? f.venue === "DEMO_IFSC" : f.venue === "DEMO_NSE"));
+  const etdFiles = files.filter(f => f.venue === VENUE[market]);
   const [rec, setRec] = useState<Record<string, unknown> | null>(null);
   const [recErr, setRecErr] = useState<ApiError | null>(null);
+  const [tick, setTick] = useState(0); const [busyFile, setBusyFile] = useState<string | null>(null);
+  const account = market === "OTC" ? "" : ETD_ACCOUNT[market].account;
+  useEffect(() => { setRec(null); setRecErr(null); }, [market]);
+  /** Margin for ONE specific clearing file revision: an EXCEPTION file must come back BLOCKED with its reason (G10), never a number. */
+  async function marginWithFile(f: ClearingFile) {
+    const snap = (ctx.snaps ?? []).find(s => s.snapshot_id.includes(market === "ETD_IFSC" ? "IFSC" : "ETD"));
+    if (!snap) { setRecErr(new ApiError(0, { code: "NO_SNAPSHOT", message: "No pinned snapshot for this market", field_errors: {}, correlation_id: "n/a", retryable: false })); return; }
+    setBusyFile(f.file_id + f.revision); setRecErr(null); ctx.setResult(null);
+    try {
+      const r = await api<MarginResult>("/risk/calculate", { method: "POST", idempotencyKey: newKey(), body: {
+        context: { market_type: market, account_id: ETD_ACCOUNT[market].account, venue: ETD_ACCOUNT[market].venue, as_of: PINNED_AS_OF, clearing_file_id: f.file_id, clearing_revision: f.revision },
+        snapshot_id: snap.snapshot_id, terms_hash: null, rule_set_hash: null, methodology: METHOD_FOR[market] } });
+      ctx.setResult(r); ctx.reload();
+    } catch (e) { setRecErr(e as ApiError); } finally { setBusyFile(null); }
+  }
   async function reconcile(fid: string) {
     try { setRec(await api("/risk/reconcile", { method: "POST", body: { file_id: fid, snapshot_id: result?.snapshot_id ?? null } })); setRecErr(null); } catch (e) { setRecErr(e as ApiError); }
   }
   if (market !== "OTC") {
     return (
       <>
-        <section className="card"><h2>Clearing-style margin files — expected vs imported</h2>
+        {result && result.market_type === market && <ResultSummary r={result} />}
+        <section className="card" style={{ marginTop: result && result.market_type === market ? 16 : 0 }}><h2>Clearing-style margin files — expected vs imported</h2>
           {etdFiles.length === 0 ? <EmptyState title="No clearing files imported for this profile" /> : (
             <div className="scroll-x"><table><thead><tr><th>File · rev</th><th>Account</th><th className="r">Independent sum of components</th><th className="r">Imported (reported) total</th><th className="r">Difference</th><th>Status</th><th /></tr></thead><tbody>
               {etdFiles.map(f => <tr key={f.file_id + f.revision}>
@@ -171,11 +197,15 @@ export function Portfolio({ ctx }: { ctx: RiskCtx }) {
                 <td className="r"><MoneyDisplay {...f.computed_total} signed={false} /></td><td className="r">{f.reported_total ? <MoneyDisplay {...f.reported_total} signed={false} /> : "none"}</td>
                 <td className="r">{f.reconciliation.difference ?? "UNKNOWN"}</td>
                 <td>{f.status === "RECONCILED" ? <StatusChip tone="ok">RECONCILED</StatusChip> : <StatusChip tone="danger">EXCEPTION</StatusChip>}</td>
-                <td><button onClick={() => reconcile(f.file_id)} disabled={!ctx.canWrite}>Re-reconcile</button></td></tr>)}
+                <td><div className="row"><button onClick={() => reconcile(f.file_id)} disabled={!ctx.canWrite}>Re-reconcile</button>
+                  <button onClick={() => marginWithFile(f)} disabled={!ctx.canWrite || busyFile === f.file_id + f.revision} aria-label={`Margin using file ${f.file_id} revision ${f.revision}`}>Margin with this file</button></div></td></tr>)}
             </tbody></table></div>)}
           {recErr && <ErrorState error={recErr} />}
           {rec && <pre className="mono card" style={{ overflow: "auto", marginTop: 12 }} aria-label="Reconciliation output">{JSON.stringify(rec, null, 2)}</pre>}
           <p className="faint">Imported margin is a SOURCE OBLIGATION, not an internally computed SPAN figure. Component aggregation is declared per row (ADDITIVE / OFFSET / INFO / REPORTED_TOTAL).</p></section>
+        <ReconStatusCard market={market} account={account} refreshKey={tick} />
+        <ClearingImport market={market} canWrite={ctx.canWrite} onDone={() => { ctx.reload(); setTick(t => t + 1); }} />
+        <PositionMetricsCard market={market} account={account} />
         {result?.components.length ? <section className="card" style={{ marginTop: 16 }}><h2>Margin components (latest result)</h2>
           <table><thead><tr><th>Component</th><th className="r">Amount</th></tr></thead><tbody>{result.components.map((c, i) => <tr key={i}><td>{c.kind}{c.hypothetical ? " (HYPOTHETICAL)" : ""}</td><td className="r"><MoneyDisplay amount={c.amount} currency={c.currency} /></td></tr>)}</tbody></table></section> : null}
         {result?.internal_estimate && <section className="card" style={{ marginTop: 16 }}><h2>Internal what-if estimate (separate from the obligation)</h2>
@@ -284,24 +314,36 @@ function ExposureBars({ base, scen }: { base: { amount: string; currency: string
 
 export function MethodologyDrawer({ result }: { result: MarginResult | null }) {
   const [open, setOpen] = useState(false); const [m, setM] = useState<Methodology | null>(null); const [err, setErr] = useState<ApiError | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null); const panel = useRef<HTMLElement>(null);
   useEffect(() => { if (open && !m) api<Methodology>("/risk/methodology").then(setM).catch(e => setErr(e)); }, [open, m]);
+  const close = useCallback(() => { setOpen(false); trigger.current?.focus(); }, []); // return focus to the control that opened the dialog
+  // Dialog keyboard contract: Escape closes; Tab/Shift+Tab are trapped inside the panel.
+  function onKey(e: KeyboardEvent<HTMLElement>) {
+    if (e.key === "Escape") { e.preventDefault(); close(); return; }
+    if (e.key !== "Tab" || !panel.current) return;
+    const f = Array.from(panel.current.querySelectorAll<HTMLElement>("button, a[href], input, select, textarea, [tabindex]:not([tabindex='-1'])")).filter(x => !x.hasAttribute("disabled"));
+    if (f.length === 0) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
   function exportTrace() {
     const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `risk-result-${result?.result_id.slice(0, 8)}.json`; a.click(); URL.revokeObjectURL(a.href);
   }
   return (
     <>
-      <button onClick={() => setOpen(true)} aria-haspopup="dialog">Methodology</button>
+      <button ref={trigger} onClick={() => setOpen(true)} aria-haspopup="dialog" aria-expanded={open}>Methodology</button>
       {open && (
-        <aside role="dialog" aria-modal="true" aria-label="Methodology" style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(560px,100vw)", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflow: "auto", zIndex: 30 }}>
-          <div className="row"><h2 style={{ margin: 0 }}>Methodology & limitations</h2><span className="spacer" /><button autoFocus onClick={() => setOpen(false)}>Close</button></div>
+        <aside ref={panel} role="dialog" aria-modal="true" aria-labelledby="meth-h" onKeyDown={onKey} style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(560px,100vw)", background: "var(--panel)", borderLeft: "1px solid var(--border)", padding: 24, overflow: "auto", zIndex: 30 }}>
+          <div className="row"><h2 id="meth-h" style={{ margin: 0 }}>Methodology & limitations</h2><span className="spacer" /><button autoFocus onClick={close}>Close</button></div>
           {err && <ErrorState error={err} />}
           {m && <>
             <p className="muted">{m.numerics}</p>
             {Object.entries(m.methods).map(([k, v]) => <div key={k}><h3>{k}</h3><p>{v.summary}</p>
               <ul className="mono">{v.formulas.map((f, i) => <li key={i}>{f}</li>)}</ul><h3>Limitations</h3><ul className="muted">{v.limitations.map((f, i) => <li key={i}>{f}</li>)}</ul></div>)}
             <h3>Conventions</h3><ul className="mono">{Object.entries(m.conventions).map(([k, v]) => <li key={k}>{k}: {v}</li>)}</ul></>}
-          {result && <><h3>Selected result trace</h3><p className="mono faint">snapshot {result.snapshot_id} · terms {result.terms_hash ?? "n/a"} · result hash {result.result_hash}</p>
+          {result && <><h3>Selected result trace</h3><p className="mono faint">snapshot {result.snapshot_id} (data as of {result.snapshot_as_of ?? "n/a"}) · terms {result.terms_hash ?? "n/a"} · result hash {result.result_hash}</p>
             <p className="mono faint">inputs: {result.input_hashes.map(h => h.slice(0, 12)).join(", ")}</p><button onClick={exportTrace}>Export result JSON</button></>}
         </aside>)}
     </>

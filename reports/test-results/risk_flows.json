@@ -1,0 +1,207 @@
+[
+ {
+  "check": "A1 import shows EXCEPTION with the independent component sum 10,000,000 and the supplied 10,100,000",
+  "ok": true,
+  "detail": "CLR-E2E-6857FB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
+ },
+ {
+  "check": "A2 the 100,000 difference is stated",
+  "ok": true,
+  "detail": "CLR-E2E-6857FB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
+ },
+ {
+  "check": "A3 the imported file is listed with status EXCEPTION",
+  "ok": true,
+  "detail": "CLR-E2E-6857FB \u00b7 r1\tACC-DEMO-NSE-001\t10,000,000 INR\t10,100,000 INR\t100000\t\n\u2715\nEXCEPTION\t\nRe-reconcile\nMargin with this file"
+ },
+ {
+  "check": "A4 margin with the EXCEPTION file is BLOCKED with the reconciliation reason and shows no required amount",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nMargin result\n\u2715\nBLOCKED\nresult f5d8dfbc \u00b7 hash 2908708deaf2\nEvidence \u2192\ni\nETD_IMPORTED_V1 \u00b7 vector/1.0.0\n\u2022\nSYNTHETIC\n\nbusiness as-of 2026-08-17T04:00:00+00:00 \u00b7 snapshot data as of 2026-08-17T03:30:00+00:00\n\nBlocked \u2014 no au"
+ },
+ {
+  "check": "A5 reconciliation-status card reports the account's LATEST file (good file) as OK with 10,000,000",
+  "ok": true,
+  "detail": "Reconciliation status \u2014 ACC-DEMO-NSE-001\n\u2713\nOK\nCLR-DEMO-NSE-20260817 \u00b7 r1\nexpected (component sum) 10000000 INR \u00b7 imported total 10000000 INR"
+ },
+ {
+  "check": "A6 position metrics: gross 60, notional 36,000,000 INR, client class UNKNOWN (not zero)",
+  "ok": true,
+  "detail": "Position metrics for limit rules \u2014 ACC-DEMO-NSE-001\nPosition metrics\nMETRIC\tVALUE\nGross lots (\u03a3|lots|)\t60 lots\nNet lots (\u03a3 signed lots)\t20 lots\nDelta-equivalent lots\t28.76950780 lots\nNotional (\u03a3|lots|\u00d7multiplier\u00d7mark)\t36000000.00 INR\nClient classification\t\n!\nUNKNOWN\n\npositions as of 2026-08-17T03:30"
+ },
+ {
+  "check": "B1 domestic run shows 12,500,000 INR and HYPOTHETICAL",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nRisk desk \u2014 Domestic ETD \u00b7 INR profile\nPinned market snapshot\n\u2014 select \u2014\nSNAP-ETD-001 \u00b7 data as of 2026-08-17T03:30Z\nAccount / venue\nACC-DEMO-NSE-001 \u00b7 DEMO_NSE\nHypothetica"
+ },
+ {
+  "check": "B2 switching to IFSC clears the domestic result: no INR amount, no 12,500,000 left on screen",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nRisk desk \u2014 IFSC ETD \u00b7 USD profile\nPinned market snapshot\n\u2014 select \u2014\nSNAP-IFSC-001 \u00b7 data as of 2026-08-17T03:30Z\nAccount / venue\nACC-DEMO-IFSC-001 \u00b7 DEMO_IFSC\nHypothetical"
+ },
+ {
+  "check": "B3 IFSC run is USD only (independent profile): USD present, INR absent",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nRisk desk \u2014 IFSC ETD \u00b7 USD profile\nPinned market snapshot\n\u2014 select \u2014\nSNAP-IFSC-001 \u00b7 data as of 2026-08-17T03:30Z\nAccount / venue\nACC-DEMO-IFSC-001 \u00b7 DEMO_IFSC\nHypothetical"
+ },
+ {
+  "check": "B4 IFSC portfolio view lists no DEMO_NSE/INR file or INR position metric",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nMargin result\n\u2713\nOK\nresult 909593c6 \u00b7 hash 363247d08a16\nEvidence \u2192\ni\nETD_IMPORTED_V1 \u00b7 vector/1.0.0\n\u2022\nSYNTHETIC\n!\nHYPOTHETI"
+ },
+ {
+  "check": "C1 OTC G03: required 9,500,000 USD, direction POST, not BLOCKED",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nRisk desk \u2014 OTC bilateral (illustrative VM waterfall)\nPinned market snapshot\n\u2014 select \u2014\nSNAP-QUIET-001 \u00b7 data as of 2026-08-17T04:00Z\nSNAP-SHOCK-001 \u00b7 data as of 2026-08-17T04:00Z\nSNAP-STALE-001 \u00b7 data as of 2026-08-14T04:"
+ },
+ {
+  "check": "C2 time axes are explicit: business as-of, snapshot data as-of and terms known-at (recording time)",
+  "ok": true,
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nRisk desk \u2014 OTC bilateral (illustrative VM waterfall)\nPinned market snapshot\n\u2014 select \u2014\nSNAP-QUIET-001 \u00b7 data as of 2026-08-17T04:00Z\nSNAP-SHOCK-001 \u00b7 data as of 2026-08-17T04:00Z\nSNAP-STALE-001 \u00b7 data as of 2026-08-14T04:"
+ },
+ {
+  "check": "C3 result id and hash are shown",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "C4 waterfall has >= 4 traced steps, each with a citation",
+  "ok": true,
+  "detail": "['1\\tnet exposure (signed, + means counterparty owes us)\\t19469510.12\\tnetting set PV', '2\\tobligor / secured party\\tPARTY_B posts to PARTY_A\\tderived from sign of exposure', '3\\tthreshold (obligor)\\t10000000\\tterms[47df5bd376d1].threshold_b', '4\\tindependent amount (obligor)\\t0\\tterms[47df5bd376d1]"
+ },
+ {
+  "check": "C5 waterfall shows 19,469,510.12 exposure, 9,469,510.12 unrounded and the 9500000 rounded amount",
+  "ok": true,
+  "detail": "Calculation waterfall (every value traced to an input or term)\n#\tSTEP\tVALUE\tCITATION\n1\tnet exposure (signed, + means counterparty owes us)\t19469510.12\tnetting set PV\n2\tobligor / secured party\tPARTY_B posts to PARTY_A\tderived from sign of exposure\n3\tthreshold (obligor)\t10000000\tterms[47df5bd376d1].threshold_b\n4\tindependent amount (obligor)\t0\tterms[47df5bd376d1].independent_amount_b\n5\ttarget collate"
+ },
+ {
+  "check": "D0 the G03 result is selectable as the stress baseline",
+  "ok": true,
+  "detail": "['\u2014 none \u2014', 'b19f0c1d \u00b7 NS-MER-NWD-001', '22ca48c5 \u00b7 NS-MER-NWD-001']"
+ },
+ {
+  "check": "D1 stress shows baseline_mutated = false and the baseline exposure 19,469,510.12 USD",
+  "ok": true,
+  "detail": "Baseline vs scenario\n!\nSTRESS_SCENARIO_NOT_A_REGULATORY_MARGIN\n\u2713\nbaseline_mutated = false\nBaseline\n+19469510.12 USD\nScenario\n+19420498.08081865 USD\n0 (axis: |net exposure|, USD)\nBaseline versus scenario\nMEASURE\tBASELINE\tSCENARIO\t\u0394\nexposure\t+19,469,510.12 USD\t+19,420,498.08081865 USD\t\u221249,012.03918135"
+ },
+ {
+  "check": "D2 scenario differs from baseline (a 100bp shift changes exposure)",
+  "ok": true,
+  "detail": "Baseline vs scenario\n!\nSTRESS_SCENARIO_NOT_A_REGULATORY_MARGIN\n\u2713\nbaseline_mutated = false\nBaseline\n+19469510.12 USD\nScenario\n+19420498.08081865 USD\n0 (axis: |net exposure|, USD)\nBaseline versus scenario\nMEASURE\tBASELINE\tSCENARIO\t\u0394\nexposure\t+19,469,510.12 USD\t+19,420,498.08081865 USD\t\u221249,012.03918135"
+ },
+ {
+  "check": "D3 the baseline result is byte-identical after the stress run (hash unchanged)",
+  "ok": true,
+  "detail": "ca73025d9c5d vs ca73025d9c5d"
+ },
+ {
+  "check": "E1 ArrowRight moves selection and focus to the next tab",
+  "ok": true,
+  "detail": "tab:true:Portfolio & waterfall"
+ },
+ {
+  "check": "E2 End selects the last tab",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E3 Home selects the first tab",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E4 roving tabindex: exactly one tab is in the tab order",
+  "ok": true,
+  "detail": "[0, -1, -1]"
+ },
+ {
+  "check": "E5 tab/tabpanel are linked via aria-controls / aria-labelledby",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E6 opening the methodology dialog moves focus inside it",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E7 Tab is trapped inside the dialog",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E8 Shift+Tab stays inside the dialog",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E9 Escape closes the dialog and returns focus to the trigger",
+  "ok": true,
+  "detail": "Methodology"
+ },
+ {
+  "check": "E10 every form control in 'Risk desk' has an accessible name",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E11 no tiny (<28px) buttons in 'Risk desk'",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E10 every form control in 'Portfolio & waterfall' has an accessible name",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E11 no tiny (<28px) buttons in 'Portfolio & waterfall'",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E10 every form control in 'Stress lab' has an accessible name",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E11 no tiny (<28px) buttons in 'Stress lab'",
+  "ok": true,
+  "detail": "[]"
+ },
+ {
+  "check": "E12 no browser console errors after sign-in across all flows",
+  "ok": true,
+  "detail": "[] | failed calls: []"
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (ETD_DOMESTIC / Risk desk)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (ETD_DOMESTIC / Portfolio & waterfall)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (ETD_DOMESTIC / Stress lab)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (OTC / Risk desk)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (OTC / Portfolio & waterfall)",
+  "ok": true,
+  "detail": ""
+ },
+ {
+  "check": "E13 390px no page-level horizontal overflow (OTC / Stress lab)",
+  "ok": true,
+  "detail": ""
+ }
+]

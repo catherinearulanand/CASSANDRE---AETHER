@@ -337,6 +337,7 @@ class ImpactBody(BaseModel):
     known_at: datetime | None = None
     hypothetical_rule_ids: list[str]
     accounts: list[dict]
+    include_feasibility: bool = False  # opt-in: ask ATLAS whether the extra requirement is coverable (creates HYPOTHETICAL proposals)
 
 
 def impact_out(r: RegImpactRun) -> dict:

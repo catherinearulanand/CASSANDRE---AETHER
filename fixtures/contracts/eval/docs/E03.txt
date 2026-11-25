@@ -1,0 +1,13 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E03 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E03 to Master MA-EVAL-E03
+Party A: Juniper Demo Fund. Party B: Halcyon Demo Securities.
+Base Currency: USD.
+Effective Date: 2026-03-01.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Juniper Demo Fund: USD 3,000,000.
+(b) Threshold with respect to Halcyon Demo Securities: USD 500,000.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Juniper Demo Fund: USD 100,000.
+(b) Minimum Transfer Amount with respect to Halcyon Demo Securities: USD 100,000.

@@ -100,17 +100,35 @@ def calculate(body: CalcBody, request: Request, db: Session = Depends(get_db), p
 class TermsBody(BaseModel):
     netting_set_id: str
     as_of: str
+    known_at: str | None = None  # RECORDING time ("what did we know then"); default = server time of this call, reported back
 
 
 @router.post("/terms/resolve")
 def terms_resolve(body: TermsBody, db: Session = Depends(get_db), p: Principal = Depends(require_roles(*WRITERS, "checker", "viewer", "auditor"))):
-    """Thin wrapper over contracts.resolve_terms so the desk can show the approved terms hash (or the explicit blocking reason)."""
+    """Thin wrapper over contracts.resolve_terms so the desk can show the approved terms hash (or the explicit blocking reason).
+    Bitemporal: terms frozen AFTER `known_at` are not visible. The known_at actually used is returned so the calculation can pin the
+    same value (terms frozen 'now' are not known as of an earlier recording time)."""
+    from app.db.base import utcnow
     as_of = svc._ts(body.as_of)
+    known_at = svc._ts(body.known_at, "known_at") if body.known_at else utcnow()
     try:
-        r = services.call("contracts.resolve_terms", db, p.tenant_id, body.netting_set_id, as_of, as_of, None)
+        r = services.call("contracts.resolve_terms", db, p.tenant_id, body.netting_set_id, as_of, known_at, None)
     except Unavailable as exc:
-        return {"status": "BLOCKED", "terms_hash": None, "blocking_reasons": [exc.message], "terms": None}
-    return {"status": r.get("status"), "terms_hash": r.get("terms_hash"), "blocking_reasons": r.get("blocking_reasons", []), "terms": r.get("terms")}
+        return {"status": "BLOCKED", "terms_hash": None, "blocking_reasons": [exc.message], "terms": None, "known_at": known_at.isoformat()}
+    return {"status": r.get("status"), "terms_hash": r.get("terms_hash"), "blocking_reasons": r.get("blocking_reasons", []), "terms": r.get("terms"),
+            "known_at": known_at.isoformat(), "known_at_source": "CALLER" if body.known_at else "SERVER_RECORDING_TIME"}
+
+
+@router.get("/position-metrics")
+def position_metrics(account_id: str, as_of: str, db: Session = Depends(get_db), p: Principal = Depends(current_principal)):
+    """Contract v1.1 risk.get_positions: raw metrics for position-limit rules. Unknown metrics are null with a warning, never zero."""
+    return svc.get_positions(db, p.tenant_id, account_id, svc._ts(as_of))
+
+
+@router.get("/reconciliation-status")
+def reconciliation_status(account_id: str, as_of: str, db: Session = Depends(get_db), p: Principal = Depends(current_principal)):
+    """Contract v1.1 risk.reconciliation_status: recomputed from stored rows; UNKNOWN (never OK) when no file exists."""
+    return svc.reconciliation_status(db, p.tenant_id, account_id, svc._ts(as_of))
 
 
 class ReconcileBody(BaseModel):

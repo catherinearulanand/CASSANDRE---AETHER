@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.security import Principal
 from app.core import services
@@ -18,6 +19,7 @@ from app.core.events import emit
 from app.db.base import lock_for_update, new_id, utcnow
 from app.db.models_core import ApprovalRow
 from app.engines.regulatory import documents as D
+from app.engines.regulatory import replay
 from app.engines.regulatory import dsl
 from app.engines.regulatory.models import RegCandidate, RegRule, RegRuleTest, RegSource, RegSpan
 
@@ -28,6 +30,18 @@ BASIS_OK = {
     "REGULATORY_VERIFIED": {"AUTHORITATIVE"},
 }
 VISIBLE = ("SCHEDULED", "ACTIVE", "SUPERSEDED", "WITHDRAWN")
+
+
+def _parents(db, r: "RegRule") -> list[dict]:
+    """Lineage parents of a rule: the exact source spans (and, via source_spans refs, their documents)."""
+    return [{"entity_type": "source_span", "entity_id": s} for s in sorted(r.span_ids or [])]
+
+
+def _link_approval(db, actor: Principal, corr, r: "RegRule", approval_id: str) -> None:
+    """The approval is itself an evidence entity (lineage stage APPROVAL) whose parent is the approved rule revision."""
+    _ev(db, actor, "APPROVAL_RECORDED", "approval", approval_id, 1, corr, output_hash=r.content_hash,
+        payload={"target": "reg_rule", "rule_id": r.rule_id, "revision": r.revision, "decision": "APPROVED",
+                 "parents": [{"entity_type": "reg_rule", "entity_id": r.rule_id}]})
 
 
 def _ev(db, actor: Principal, action: str, etype: str, eid: str, rev: int = 1, corr: str | None = None, **kw):
@@ -49,10 +63,21 @@ def get_source(db, tenant_id: str, sid: str) -> RegSource:
     return s
 
 
+def _lock_key(db, tenant_id: str, rule_key: str) -> None:
+    """Serialise ALL mutations of one rule key (version numbering, overlap/supersession checks, activation order).
+    Lock order is always: every row of the key by version, THEN nothing else -> no deadlock between two mutators."""
+    db.execute(lock_for_update(select(RegRule).where(RegRule.tenant_id == tenant_id, RegRule.rule_key == rule_key)
+                               .order_by(RegRule.version)).execution_options(populate_existing=True)).scalars().all()
+
+
 def get_rule(db, tenant_id: str, rid: str, lock: bool = False) -> RegRule:
     if lock:
-        # Mutations take a row lock and refresh, so the optimistic-revision / approval-state checks that follow
-        # see committed data (otherwise two checkers can both pass the check concurrently on PostgreSQL).
+        # Mutations lock the whole rule key and refresh, so the optimistic-revision / approval-state / overlap checks that
+        # follow see committed data (otherwise two checkers can both pass the check concurrently on PostgreSQL).
+        peek = db.get(RegRule, rid)
+        if peek is None or peek.tenant_id != tenant_id:
+            raise NotFound("Rule not found")
+        _lock_key(db, tenant_id, peek.rule_key)
         q = lock_for_update(select(RegRule).where(RegRule.rule_id == rid, RegRule.tenant_id == tenant_id))             .execution_options(populate_existing=True)
         r = db.execute(q).scalar_one_or_none()
     else:
@@ -96,8 +121,15 @@ def ingest_document(db, actor: Principal, data: bytes, content_type: str | None,
         provenance="SYNTHETIC" if meta["authority_type"] in ("SYNTHETIC", "INTERNAL_POLICY") else "PUBLIC_SOURCE")
     if created_at_hint:
         src.retrieved_at = created_at_hint
-    db.add(src)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(src)
+            db.flush()
+    except IntegrityError:  # concurrent upload of the same bytes: the other transaction won; deduplicate by hash
+        existing = db.execute(select(RegSource).where(RegSource.tenant_id == actor.tenant_id, RegSource.sha256 == sha)).scalar_one_or_none()
+        if existing is None:
+            raise
+        return existing, True
     _ev(db, actor, "SOURCE_INGESTED", "reg_source", src.source_id, corr=corr, input_hashes=[sha], output_hash=src.text_sha256,
         rationale=f"ingested {kind} ({src.authority_type}); unreadable_pages={ex['unreadable']}; injection_flags={len(src.risk_flags)}",
         payload={"title": src.title, "kind": kind, "pages": ex["pages"], "authority_type": src.authority_type})
@@ -171,7 +203,7 @@ def extract(db, actor: Principal, source_id: str, mode: str, manual: list[dict] 
         cands.append(cand)
     db.flush()
     _ev(db, actor, "CANDIDATES_EXTRACTED", "reg_source", src.source_id, corr=corr, input_hashes=[src.sha256], output_hash=run_hash,
-        source_mode=mode, source_spans=[{"span_id": s} for c in cands for s in c.span_ids],
+        source_mode=mode, source_spans=[{"span_id": s, "document_id": src.source_id} for c in cands for s in c.span_ids],
         rationale=f"{mode}: {len(cands)} candidates, {sum(1 for c in cands if not c.grounded)} ungrounded; proposals only, nothing activated",
         payload={"mode": mode, "candidates": len(cands)})
     return cands
@@ -250,6 +282,7 @@ def create_rule(db, actor: Principal, b: dict, corr: str | None = None, version_
     from app.engines.regulatory.models import RULE_AUTHORITY
     if b["authority_type"] not in RULE_AUTHORITY:
         raise ValidationFailed("authority_type invalid", field_errors={"authority_type": f"one of {RULE_AUTHORITY}"})
+    _lock_key(db, actor.tenant_id, b["rule_key"])
     prev = db.execute(select(RegRule).where(RegRule.tenant_id == actor.tenant_id, RegRule.rule_key == b["rule_key"])
                       .order_by(RegRule.version.desc())).scalars().first()
     r = RegRule(tenant_id=actor.tenant_id, rule_key=b["rule_key"], version=version_override or ((prev.version + 1) if prev else 1),
@@ -261,12 +294,16 @@ def create_rule(db, actor: Principal, b: dict, corr: str | None = None, version_
                 source_ref=b.get("source_ref"))
     _apply_content(r, {k: v for k, v in b.items() if k not in ("rule_key", "rationale", "effective_from")} | {"effective_from": b["effective_from"]})
     _spans_exist(db, r)
-    db.add(r)
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(r)
+            db.flush()
+    except IntegrityError as exc:  # two concurrent FIRST creations of one key (no rows existed to lock)
+        raise Conflict("another revision of this rule key was created concurrently; reload and retry", code="REVISION_CONFLICT") from exc
     _sync_tests(db, r, b.get("test_vectors"))
     _ev(db, actor, "RULE_DRAFTED", "reg_rule", r.rule_id, r.revision, corr, output_hash=r.content_hash,
-        source_spans=[{"span_id": s} for s in r.span_ids], rationale=r.rationale,
-        payload={"rule_key": r.rule_key, "version": r.version, "compile_ok": r.compile_report["ok"]})
+        source_spans=replay.span_refs(db, r.span_ids), rationale=r.rationale,
+        payload={"rule_key": r.rule_key, "version": r.version, "compile_ok": r.compile_report["ok"], "parents": _parents(db, r)})
     emit(db, event_type="RuleProposed", tenant_id=actor.tenant_id, correlation_id=corr or new_id(), aggregate_id=r.rule_id,
          actor_id=actor.user_id, aggregate_revision=r.revision, payload={"rule_key": r.rule_key, "version": r.version})
     return r
@@ -295,7 +332,7 @@ def update_draft(db, actor: Principal, rule_id: str, changes: dict, expected_rev
     r.updated_at = utcnow()
     _sync_tests(db, r, changes.get("test_vectors"))
     _ev(db, actor, "RULE_DRAFT_EDITED", "reg_rule", r.rule_id, r.revision, corr, output_hash=r.content_hash, rationale=r.rationale,
-        source_spans=[{"span_id": s} for s in r.span_ids], payload={"compile_ok": r.compile_report["ok"]})
+        source_spans=replay.span_refs(db, r.span_ids), payload={"compile_ok": r.compile_report["ok"]})
     return r
 
 
@@ -365,7 +402,7 @@ def submit(db, actor: Principal, rule_id: str, reason: str, expected_revision: i
                        expires_at=utcnow() + timedelta(seconds=get_settings().approval_ttl_seconds)))
     db.flush()
     _ev(db, actor, "RULE_SUBMITTED", "reg_rule", r.rule_id, r.revision, corr, output_hash=r.content_hash, rationale=reason,
-        source_spans=[{"span_id": s} for s in r.span_ids], payload={"tests_passed": len(res)})
+        source_spans=replay.span_refs(db, r.span_ids), payload={"tests_passed": len(res)})
     return r
 
 
@@ -415,9 +452,11 @@ def review(db, actor: Principal, rule_id: str, decision: str, reason: str, expec
     ap.revision += 1
     db.flush()
     _ev(db, actor, "RULE_APPROVED" if decision == "APPROVE" else "RULE_REJECTED", "reg_rule", r.rule_id, r.revision, corr,
-        output_hash=r.content_hash, rationale=reason, source_spans=[{"span_id": s} for s in r.span_ids],
-        payload={"approval_id": ap.approval_id, "maker": r.maker_id, "checker": actor.user_id})
+        output_hash=r.content_hash, rationale=reason, source_spans=replay.span_refs(db, r.span_ids),
+        payload={"approval_id": ap.approval_id, "maker": r.maker_id, "checker": actor.user_id, "parents": _parents(db, r),
+                 **({"replay": replay.rule_replay_spec(db, r)} if decision == "APPROVE" else {})})
     if decision == "APPROVE":
+        _link_approval(db, actor, corr, r, ap.approval_id)
         emit(db, event_type="RuleApproved", tenant_id=actor.tenant_id, correlation_id=corr or new_id(), aggregate_id=r.rule_id,
              actor_id=actor.user_id, aggregate_revision=r.revision, payload={"rule_key": r.rule_key, "version": r.version})
     return r
@@ -450,6 +489,12 @@ def activate(db, actor: Principal, rule_id: str, expected_revision: int | None, 
     problems = _check_basis(db, r)
     if problems:
         raise Blocked("Source basis invalid at activation: " + "; ".join(problems), code="SOURCE_BASIS_INVALID")
+    # a version below one that is already activated must never go live (would leave two ACTIVE versions of one key)
+    if db.execute(select(RegRule.version).where(RegRule.tenant_id == actor.tenant_id, RegRule.rule_key == r.rule_key,
+                                                RegRule.version > r.version, RegRule.activated_at.is_not(None),
+                                                RegRule.status.in_(("SCHEDULED", "ACTIVE", "SUPERSEDED")))).first():
+        raise Conflict(f"a later version of {r.rule_key} is already activated; v{r.version} cannot be activated out of order",
+                       code="OUT_OF_ORDER_ACTIVATION")
     # no overlapping contradictory revisions: a new version must take effect strictly after the version it supersedes
     prior = db.execute(select(RegRule).where(RegRule.tenant_id == actor.tenant_id, RegRule.rule_key == r.rule_key,
                                              RegRule.version < r.version, RegRule.activated_at.is_not(None),
@@ -470,9 +515,9 @@ def activate(db, actor: Principal, rule_id: str, expected_revision: int | None, 
     db.flush()
     _ev(db, actor, "RULE_ACTIVATED" if r.status == "ACTIVE" else "RULE_SCHEDULED", "reg_rule", r.rule_id, r.revision, corr,
         effective_at=r.effective_from, output_hash=r.content_hash, rationale=reason,
-        source_spans=[{"span_id": s} for s in r.span_ids],
+        source_spans=replay.span_refs(db, r.span_ids),
         payload={"rule_key": r.rule_key, "version": r.version, "status": r.status, "approval_id": ap.approval_id,
-                 "supersedes": prior.rule_id if prior else None})
+                 "supersedes": prior.rule_id if prior else None, "parents": _parents(db, r), "replay": replay.rule_replay_spec(db, r)})
     emit(db, event_type="RuleActivated", tenant_id=actor.tenant_id, correlation_id=corr or new_id(), aggregate_id=r.rule_id,
          actor_id=actor.user_id, aggregate_revision=r.revision, effective_at=r.effective_from,
          payload={"rule_key": r.rule_key, "version": r.version, "status": r.status})
@@ -486,7 +531,9 @@ def activate(db, actor: Principal, rule_id: str, expected_revision: int | None, 
 def advance_states(db, actor: Principal, now: datetime, corr=None) -> list[str]:
     """Persist clock-driven SCHEDULED->ACTIVE (and predecessor SUPERSEDED). Explicit clock; never implicit."""
     changed = []
-    for r in db.execute(select(RegRule).where(RegRule.tenant_id == actor.tenant_id, RegRule.status == "SCHEDULED")).scalars().all():
+    # Row locks: two concurrent callers must not both flip the same SCHEDULED rule (duplicate events / double revision bump).
+    for r in db.execute(lock_for_update(select(RegRule).where(RegRule.tenant_id == actor.tenant_id, RegRule.status == "SCHEDULED")
+                                        .order_by(RegRule.rule_key, RegRule.version)).execution_options(populate_existing=True)).scalars().all():
         if r.effective_from <= aware(now, "now"):
             r.status = "ACTIVE"
             r.revision += 1

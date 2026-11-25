@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Index, Integer, String, UniqueConstraint
+from sqlalchemy import JSON, Index, Integer, String, UniqueConstraint, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, CommonColumns, UTCDateTime, new_id
@@ -84,7 +84,11 @@ class RiskResult(Base, CommonColumns):
     cache_key: Mapped[str] = mapped_column(String(64), index=True)  # tenant + all input hashes + method version
     result_hash: Mapped[str] = mapped_column(String(64))
     payload: Mapped[dict] = mapped_column(JSON)
-    __table_args__ = (Index("ix_risk_result_tenant_created", "tenant_id", "created_at"),)
+    # Cacheable (OK/UNSUPPORTED) results are unique per (tenant, cache_key): concurrent identical computes cannot store two rows.
+    # BLOCKED rows are audit records of each attempt and are deliberately NOT unique.
+    __table_args__ = (Index("ix_risk_result_tenant_created", "tenant_id", "created_at"),
+                      Index("uq_risk_result_cacheable", "tenant_id", "cache_key", unique=True,
+                            postgresql_where=text("status IN ('OK','UNSUPPORTED')"), sqlite_where=text("status IN ('OK','UNSUPPORTED')")))
 
 
 class RiskStressRun(Base, CommonColumns):

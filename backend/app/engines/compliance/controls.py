@@ -22,23 +22,23 @@ _MKT = {"in": ["market_type", ["OTC", "ETD_DOMESTIC", "ETD_IFSC"]]}
 
 LIBRARY: list[dict] = [
     {"control_key": "CMP-COV-ETD-INR", "family": "MARGIN_COVERAGE", "title": "Domestic ETD margin coverage (INR, per account)",
-     "rule_key": "DEMO-ETD-COVERAGE", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24,
+     "rule_key": "DEMO-ETD-COVERAGE", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24, "frequency": "DAILY",
      "scope": {"all": [{"eq": ["market_type", "ETD_DOMESTIC"]}, {"eq": ["venue", "DEMO_NSE"]}, {"eq": ["currency", "INR"]}]},
      "condition": {"gte": ["eligible_collateral_inr", "required_margin_inr"]},
      "required_inputs": ["required_margin_inr", "eligible_collateral_inr", "input_as_of"]},
     {"control_key": "CMP-COV-IFSC-USD", "family": "MARGIN_COVERAGE", "title": "IFSC ETD margin coverage (USD, per account)",
-     "rule_key": "DEMO-IFSC-COVERAGE", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24,
+     "rule_key": "DEMO-IFSC-COVERAGE", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24, "frequency": "DAILY",
      "scope": {"all": [{"eq": ["market_type", "ETD_IFSC"]}, {"eq": ["venue", "DEMO_IFSC"]}, {"eq": ["currency", "USD"]}]},
      "condition": {"gte": ["eligible_collateral_usd", "required_margin_usd"]},
      "required_inputs": ["required_margin_usd", "eligible_collateral_usd", "input_as_of"]},
     {"control_key": "CMP-POSLIMIT-ETD", "family": "POSITION_LIMIT", "title": "Domestic ETD client position limit (fictional 100 lots)",
-     "rule_key": "DEMO-ETD-POSLIMIT", "rule_version": 1, "severity": "MEDIUM", "max_staleness_hours": 24,
+     "rule_key": "DEMO-ETD-POSLIMIT", "rule_version": 1, "severity": "MEDIUM", "max_staleness_hours": 24, "frequency": "DAILY",
      "params": {"required_basis": "GROSS_FUTURES_EQUIV", "aggregation": "CLIENT", "unit": "lots"},
      "scope": {"all": [{"eq": ["market_type", "ETD_DOMESTIC"]}, {"eq": ["client_classification", "CLIENT"]}]},
      "condition": {"lte": ["position_lots", 100]},
      "required_inputs": ["position_lots", "position_basis", "client_classification", "input_as_of"]},
     {"control_key": "CMP-RECON-ETD", "family": "RECONCILIATION", "title": "Clearing margin file reconciliation",
-     "rule_key": "DEMO-ETD-MARGIN", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24,
+     "rule_key": "DEMO-ETD-MARGIN", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24, "frequency": "DAILY",
      "scope": {"eq": ["market_type", "ETD_DOMESTIC"]},
      "condition": {"eq": ["reconciliation_status", "MATCHED"]},
      "required_inputs": ["reconciliation_status", "input_as_of"]},
@@ -51,14 +51,31 @@ LIBRARY: list[dict] = [
      "condition": {"all": [{"eq": ["terms_status", "FROZEN"]},
                            {"effective_on": ["agreement_effective_from", "agreement_effective_to"]}]},
      "required_inputs": ["terms_status", "agreement_effective_from"]},
+    # ---- round 2: controls that were UNSUPPORTED in round 1 now have inputs via contract v1.1 (rule_version 2 supersedes the
+    # unsupported v1 row of the same key). All are SYNTHETIC policy; none is presented as statutory.
+    {"control_key": "CMP-COLL-CONC", "family": "COLLATERAL_CONCENTRATION", "title": "Collateral allocation within concentration caps (per proposal)",
+     "rule_key": "DEMO-COLLATERAL-CONC", "rule_version": 2, "severity": "MEDIUM", "max_staleness_hours": None, "frequency": "EVENT",
+     "scope": {"in": ["market_type", ["OTC", "ETD_DOMESTIC", "ETD_IFSC"]]},
+     "condition": {"eq": ["concentration_breaches", 0]},
+     "required_inputs": ["concentration_breaches"]},
+    {"control_key": "CMP-SETTLE-DEADLINE", "family": "SETTLEMENT_DEADLINE", "title": "Posted collateral covers margin at the settlement deadline (INR)",
+     "rule_key": "DEMO-ETD-SETTLEMENT", "rule_version": 2, "severity": "HIGH", "max_staleness_hours": 24, "frequency": "EVENT",
+     "scope": {"all": [{"eq": ["market_type", "ETD_DOMESTIC"]}, {"eq": ["venue", "DEMO_NSE"]}, {"eq": ["currency", "INR"]}]},
+     "condition": {"gte": ["deadline_collateral_inr", "required_margin_inr"]},
+     "required_inputs": ["required_margin_inr", "deadline_collateral_inr", "input_as_of"]},
+    {"control_key": "CMP-SETTLE-DEADLINE-USD", "family": "SETTLEMENT_DEADLINE", "title": "Posted collateral covers margin at the settlement deadline (IFSC USD)",
+     "rule_key": "DEMO-IFSC-SETTLEMENT", "rule_version": 1, "severity": "HIGH", "max_staleness_hours": 24, "frequency": "EVENT",
+     "scope": {"all": [{"eq": ["market_type", "ETD_IFSC"]}, {"eq": ["venue", "DEMO_IFSC"]}, {"eq": ["currency", "USD"]}]},
+     "condition": {"gte": ["deadline_collateral_usd", "required_margin_usd"]},
+     "required_inputs": ["required_margin_usd", "deadline_collateral_usd", "input_as_of"]},
+    {"control_key": "CMP-REPORT-SCHEMA", "family": "REPORTING_COMPLETENESS",
+     "title": "Synthetic margin-report record complete and well-formed (NOT an approved regulatory schema; never transmitted)",
+     "rule_key": "DEMO-REPORT-SCHEMA", "rule_version": 2, "severity": "LOW", "max_staleness_hours": None, "frequency": "EVENT",
+     "scope": _MKT, "condition": {"all": [{"eq": ["report_missing_fields", 0]}, {"eq": ["report_format_errors", 0]}]},
+     "required_inputs": ["report_missing_fields", "report_format_errors"]},
 ]
-UNSUPPORTED = [
-    ("CMP-COLL-CONC", "COLLATERAL_CONCENTRATION", "Collateral eligibility and concentration",
-     "No frozen contract exposes allocation constraint slacks to compliance in this build."),
-    ("CMP-SETTLE-DEADLINE", "SETTLEMENT_DEADLINE", "Margin available as of settlement deadline",
-     "Requires settled-vs-proposed collateral timeline from the collateral engine (not in contract v1)."),
-    ("CMP-REPORT-SCHEMA", "REPORTING_COMPLETENESS", "Reporting schema completeness",
-     "No approved reporting schema version exists; no regulatory submission is implemented."),
+# Controls still lacking inputs. Empty after round 2; kept so the mechanism (and its tests) remain.
+UNSUPPORTED: list[tuple[str, str, str, str]] = [
 ]
 
 
@@ -112,6 +129,14 @@ def seed_library(session, tenant_id: str) -> list[CmpControl]:
             "control_key": key, "family": fam, "title": title, "rule_key": "UNSUPPORTED", "rule_version": 1,
             "authority_type": "SYNTHETIC_POLICY", "support_status": "UNSUPPORTED", "unsupported_reason": why,
             "severity": "LOW"}))
+    # Upgrade path: a tenant seeded in round 1 holds an UNSUPPORTED v1 row for keys that now have a SUPPORTED v2.
+    # The old row is retired (active=False), never deleted: history stays queryable and nothing is rewritten.
+    supported_keys = {c.control_key for c in out if c.support_status == "SUPPORTED" and c.rule_version > 1}
+    for old in session.execute(select(CmpControl).where(CmpControl.tenant_id == tenant_id, CmpControl.support_status == "UNSUPPORTED",
+                                                        CmpControl.active.is_(True))).scalars():
+        if old.control_key in supported_keys:
+            old.active = False
+    session.flush()
     return out
 
 
@@ -134,3 +159,55 @@ def supersede_control(session, tenant_id: str, control_key: str, new_def: dict, 
     cur.effective_to = effective_from
     session.flush()
     return new, cur
+
+
+def reevaluate_affected(session, tenant_id: str, control_key: str, as_of: datetime, actor: dict, *, correlation_id: str | None = None,
+                        force: bool = False) -> dict:
+    """G23: after a control supersession, re-evaluate ONLY the subjects that had a (non-recheck) evaluation under this
+    control_key. Controls of other keys and subjects never evaluated for this control are not touched. Subjects whose
+    latest outcome was NOT_APPLICABLE and whose scope is unchanged are skipped (their outcome cannot change).
+    Inputs are the facts persisted with the subject's latest evaluation (no new data is invented). History is preserved:
+    new evaluations are appended; old ones are never edited."""
+    from app.engines.compliance import engine as E
+    from app.engines.compliance.models import CmpEvaluation
+    cid = correlation_id or E.new_id()
+    new = E.active_controls(session, tenant_id, as_of, only_key=control_key)
+    if not new:
+        raise ValidationFailed("no active revision of the control at as_of", field_errors={"as_of": "no active revision"})
+    new = new[-1]
+    rows = session.execute(select(CmpEvaluation).where(CmpEvaluation.tenant_id == tenant_id, CmpEvaluation.control_key == control_key,
+                                                       CmpEvaluation.is_recheck.is_(False))
+                           .order_by(CmpEvaluation.as_of, CmpEvaluation.created_at)).scalars().all()
+    latest: dict[str, CmpEvaluation] = {}
+    for e in rows:
+        latest[e.subject_id] = e
+    touched, skipped, cases = [], [], []
+    for subj, last in sorted(latest.items()):
+        if last.rule_version == new.rule_version and not force:
+            skipped.append({"subject_id": subj, "reason": "ALREADY_EVALUATED_UNDER_CURRENT_REVISION"})
+            continue
+        old_ctrl = session.execute(select(CmpControl).where(CmpControl.control_id == last.control_id)).scalar_one()
+        if last.status == "NOT_APPLICABLE" and old_ctrl.scope == new.scope:
+            skipped.append({"subject_id": subj, "reason": "NOT_APPLICABLE_AND_SCOPE_UNCHANGED"})
+            continue
+        old_facts = dict(last.facts)
+        ctx = {"market_type": last.market_type, "venue": last.venue, "account_id": old_facts.get("account_id") or subj,
+               "currency": old_facts.get("currency"), "jurisdiction": old_facts.get("jurisdiction"), "as_of": as_of.isoformat()}
+        if last.snapshot_id and old_facts.get("settlement_deadline"):
+            ctx["settlement_deadline"] = old_facts["settlement_deadline"]
+        ctx = E.normalise_context(ctx)
+        # Fresh inputs from the owning engines as of the effective date (stored facts may be stale and would only yield UNKNOWN).
+        # Facts that only a caller could supply are carried over, still labelled CALLER_SUPPLIED; their input_as_of keeps them honest.
+        carry = {k: v for k, v in old_facts.items() if (last.fact_provenance or {}).get(k) == "CALLER_SUPPLIED" and k in E.CALLER_ALLOWED}
+        facts, prov, reasons = E.gather_facts(session, tenant_id, ctx, last.margin_result_id, last.allocation_id, carry or None, {new.family})
+        ev, created = E.run_control(session, tenant_id, new, ctx, facts, prov, reasons, as_of, last.snapshot_id,
+                                    last.rule_set_hash, last.margin_result_id, last.allocation_id, cid, actor)
+        touched.append({"subject_id": subj, "evaluation_id": ev.evaluation_id, "status": ev.status, "created": created})
+        if created:
+            c = E.open_or_update_case(session, tenant_id, ev, actor, {**ctx, "snapshot_id": last.snapshot_id, "rule_set_hash": last.rule_set_hash,
+                                                                      "correlation_id": cid})
+            if c:
+                cases.append(c.case_id)
+    return {"control_key": control_key, "new_rule_version": new.rule_version, "re_evaluated": touched, "skipped": skipped,
+            "cases_touched": sorted(set(cases)), "correlation_id": cid,
+            "note": "Only subjects previously evaluated under this control were re-evaluated; other controls/subjects untouched; history retained."}

@@ -35,6 +35,23 @@ RE_SEG = re.compile(r"Initial Margin, if any, is (?P<neg>not )?held in segregate
 RE_VAL_AGENT = re.compile(r"The Valuation Agent is (?P<p>[^.]+)\.")
 RE_CALL = re.compile(r"notice no later than (?P<t>\d{2}:\d{2}) ")
 RE_WRT = re.compile(r"(?:Threshold|Minimum Transfer Amount|Independent Amount) with respect to (.+?)(?::| is )")
+RE_COMMENT = re.compile(r"<!--.*?-->", re.S)
+RE_NET_NEG = re.compile(r"Close-out netting does not apply to [^.]*\.")
+# Passages that say they are NOT operative (illustrations, drafts, hidden text). A clause-shaped sentence inside such a
+# block must never look approve-ready: it is downgraded to UNRESOLVED for a human to confirm.
+RE_NON_OPERATIVE = re.compile(
+    r"not operative|non-operative|explanatory only|by way of example|for illustration|illustration|example only|"
+    r"for explanation only|hidden text|white on white|not part of the agreement|superseded|deleted|struck|"
+    r"for information only|draft only|has been replaced", re.I)
+# Instruction-shaped text addressed to automated systems (prompt injection). It is DATA: surfaced, never executed.
+RE_INJECTION = re.compile(
+    r"ignore (?:all |any )?(?:previous|prior|above) instructions|automated systems?|\bsystem\s*:|you are now|maintenance mode|"
+    r"approve (?:every|all)\b|call the \w+ tool|\bexecute\s*:|\bfreeze\s*\(|export the audit|disregard (?:the )?(?:above|previous)", re.I)
+# Sentences that talk about material terms but matched no deterministic pattern: surfaced, never silently dropped.
+RE_MATERIAL_WORDS = re.compile(
+    r"\b(?:Threshold|Minimum Transfer Amount|Independent Amount|Credit Rating|netting|Valuation Agent|Haircut|"
+    r"Valuation Percentage|rounded|rounding|segregated|Eligible Collateral|Concentration Cap)\b", re.I)
+RE_HEADING = re.compile(r"^(?:Paragraph \d+\.\s*)?[A-Z][A-Za-z\- ]{0,60}\.?$")
 LABEL_KEY = {"Threshold": "threshold", "Minimum Transfer Amount": "mta", "Independent Amount": "independent_amount"}
 COLS = ["Asset", "Currency", "Issuer", "Valuation Percentage", "Haircut", "FX Haircut", "Concentration Cap",
         "Min Rating", "Max Maturity"]
@@ -72,8 +89,13 @@ def _prop(key, direction, value, m, off=0, condition=None, issues=None, unit=Non
             "unit": unit}
 
 
+_ALIASES = {"Party A": "A", "Party B": "B"}  # the header defines Party A/B, and intake checks it against the package
+
+
 def _side(party: str, names: dict[str, str]) -> tuple[str | None, list[str]]:
     p = party.strip()
+    if p in _ALIASES:
+        return _ALIASES[p], []
     if p in names:
         return names[p], []
     return None, [f"UNKNOWN_PARTY: {p!r} is neither Party A nor Party B of this package"]
@@ -107,16 +129,18 @@ def _schedule(text: str) -> dict | None:
     if tb is None:
         return None
     issues: list[str] = []
-    if tb["hdr"] != COLS:
+    # Columns are located BY HEADER NAME (any order). A missing/extra/duplicated column is flagged, never guessed.
+    if sorted(tb["hdr"]) != sorted(COLS):
         return {"field_key": "eligible_schedule", "direction": None, "value": None,
                 "quote": text[tb["start"]:tb["end"]], "start": tb["start"], "end": tb["end"], "condition": None,
                 "issues": [f"SCHEDULE_COLUMNS_UNEXPECTED: {tb['hdr']}"], "unit": None}
+    pos = {name: tb["hdr"].index(name) for name in COLS}
     out = []
     for i, r in enumerate(tb["rows"], 1):
         if len(r) != len(COLS):
             issues.append(f"row{i}: expected {len(COLS)} cells, found {len(r)}")
             continue
-        asset, ccy, iss, val, hc, fx, cap, mr, mm = r
+        asset, ccy, iss, val, hc, fx, cap, mr, mm = (r[pos[c]] for c in COLS)
         row: dict[str, Any] = {"asset_class": asset, "currency": ccy, "issuer_class": iss}
         for k, c in (("valuation_pct", val), ("haircut_pct", hc), ("fx_haircut_pct", fx)):
             v = _pct_cell(c)
@@ -166,6 +190,8 @@ def extract_rules(text: str, party_a: dict, party_b: dict, base_ccy: str) -> lis
         props.append(_prop("mta_semantics", None, "GTE" if m.group("cmp") == "greater than or equal to" else "GT", m))
     for m in RE_NET.finditer(text):
         props.append(_prop("netting_authorization", None, True, m, issues=[], unit=m.group("ns")))
+    for m in RE_NET_NEG.finditer(text):
+        props.append(_prop("netting_authorization", None, False, m, issues=[]))
     for m in RE_SEG.finditer(text):
         props.append(_prop("segregated_im", None, m.group("neg") is None, m))
     for m in RE_VAL_AGENT.finditer(text):
@@ -176,7 +202,58 @@ def extract_rules(text: str, party_a: dict, party_b: dict, base_ccy: str) -> lis
     sch = _schedule(text)
     if sch:
         props.append(sch)
-    return props
+    comments = [(m.start(), m.end()) for m in RE_COMMENT.finditer(text)]
+    for pr in props:  # clause-shaped text inside an explicitly non-operative block must not look approve-ready
+        if pr["field_key"] == "unparsed_clause":
+            continue
+        if RE_NON_OPERATIVE.search(_block(text, pr["start"], pr["end"])):
+            pr["issues"] = list(pr.get("issues") or []) + [
+                "NON_OPERATIVE_CONTEXT: clause sits in a passage marked illustrative/hidden/non-operative; confirm it is operative"]
+        elif any(a < pr["end"] and pr["start"] < b for a, b in comments):
+            pr["issues"] = list(pr.get("issues") or []) + [
+                "NON_OPERATIVE_CONTEXT: clause sits inside a comment (<!-- ... -->), which is not contract text; confirm it is operative"]
+    return props + _residual(text, props)
+
+
+def _block(text: str, s: int, e: int) -> str:
+    """The blank-line-delimited paragraph block containing [s, e)."""
+    a = text.rfind("\n\n", 0, s)
+    b = text.find("\n\n", e)
+    return text[(0 if a < 0 else a + 2):(len(text) if b < 0 else b)]
+
+
+def _residual(text: str, props: list[dict]) -> list[dict]:
+    """Surface material-looking sentences no deterministic pattern covered (paraphrases, unit words, unsupported rating
+    scales, negative statements) and instruction-shaped text. Each becomes an UNRESOLVED `unparsed_clause` item: a human must
+    read and REJECT/transcribe it before freeze, so nothing material disappears silently. Headings are skipped."""
+    spans = [(p["start"], p["end"]) for p in props]
+    out: list[dict] = []
+    pos = 0
+    for line in text.split("\n"):
+        ls, le = pos, pos + len(line)
+        pos = le + 1
+        if not line.strip():
+            continue  # (table rows are NOT skipped: rows of the parsed eligibility table are covered by its span; any other table is surfaced)
+        for m in re.finditer(r"[^.;]+(?:\.[0-9][^.;]*)*[.;]?", line):  # sentence-ish pieces; keeps decimals like 1,250,000.50 intact
+            seg = m.group(0)
+            ss, se = ls + m.start(), ls + m.end()
+            body = seg.strip()
+            if len(body.split()) < 4 or RE_HEADING.match(body):
+                continue
+            if any(a < se and ss < b for a, b in spans):
+                continue
+            inj = RE_INJECTION.search(body)
+            if inj:
+                out.append({"field_key": "unparsed_clause", "direction": None, "value": body[:300], "quote": text[ss:se],
+                            "start": ss, "end": se, "condition": None, "unit": None,
+                            "issues": ["SUSPECTED_PROMPT_INJECTION: instruction-shaped text addressed to automated systems; "
+                                       "treated as data, never executed; reviewer should reject it"]})
+            elif RE_MATERIAL_WORDS.search(body):
+                out.append({"field_key": "unparsed_clause", "direction": None, "value": body[:300], "quote": text[ss:se],
+                            "start": ss, "end": se, "condition": None, "unit": None,
+                            "issues": ["UNPARSED_MATERIAL_CLAUSE: wording about material terms matched no deterministic pattern "
+                                       "(paraphrase, spelled-out amount, unsupported rating scale or negation); read it and key it in or reject"]})
+    return out
 
 
 def check_proposal(p: dict, text: str, party_a_name: str, party_b_name: str, base_ccy: str,
@@ -191,10 +268,12 @@ def check_proposal(p: dict, text: str, party_a_name: str, party_b_name: str, bas
         # non-ASCII document: offsets are Unicode character offsets; recorded for transparency
         issues.append("NON_ASCII_DOCUMENT_REVIEW: offsets are character offsets; byte offsets differ")
     key = p.get("field_key")
+    if key == "unparsed_clause":  # pseudo-item: carries its own issues; never has a validated value
+        return p, issues
     spec = T.FIELD_CATALOG.get(key)
     if spec is None:
         return p, issues + [f"UNKNOWN_FIELD_KEY: {key}"]
-    names = {party_a_name: "A", party_b_name: "B"}
+    names = {party_a_name: "A", party_b_name: "B", **_ALIASES}
     if spec["direction"] and p.get("direction") != spec["direction"]:
         issues.append(f"DIRECTION_MISMATCH: {key} requires direction {spec['direction']}, proposal says {p.get('direction')}")
     wrt = RE_WRT.search(q or "")

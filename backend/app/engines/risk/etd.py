@@ -109,3 +109,23 @@ def internal_estimate(positions: list[dict], instruments: dict[str, dict], md: M
             "metrics": {"gross_lots": str(gross), "net_lots": str(net), "notional": str(notional.quantize(Q2)),
                         "delta_equivalent_lots": str(delta_eq)},
             "by_instrument": by_inst}
+
+
+def position_metrics(positions: list[dict], instruments: dict[str, dict], md: MarketData, val: date) -> dict:
+    """Raw metrics for position-limit rules (contract v1.1): notional = sum |lots| x multiplier x underlying mark (instrument currency);
+    delta-equivalent lots = sum lots x delta (futures 1.0; options Black-Scholes-Merton delta, float math quantised to 8dp)."""
+    notional = delta_eq = Decimal(0)
+    for p in positions:
+        inst = instruments[p["instrument_id"]]
+        lots = Decimal(p["signed_lots"])
+        under = inst["instrument_id"] if inst["type"] == "FUT" else inst["underlying_id"]
+        mk = md.marks.get(under)
+        if mk is None:
+            raise PricingError(f"missing mark for {under}")
+        notional += abs(lots) * Decimal(inst["multiplier"]) * mk
+        if inst["type"] == "FUT":
+            d0 = 1.0
+        else:
+            _, d0 = position_value(inst, lots, md, val, Decimal(0))
+        delta_eq += lots * Decimal(repr(round(d0, 8)))
+    return {"notional": str(notional.quantize(Q2)), "delta_equivalent_lots": str(delta_eq)}

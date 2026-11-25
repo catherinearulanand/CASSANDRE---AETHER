@@ -110,7 +110,7 @@ def test_lineage_complete_chain_and_ordering(tenant):
     assert g["complete"] and g["missing"] == []
     stages = [n["stage"] for n in g["nodes"]]
     assert stages == sorted(stages, key=lin.STAGES.index)
-    assert {"from": "snapshot:SNAP-1", "to": "margin_result:MR1"} in g["edges"]
+    assert {"from": "snapshot:SNAP-1", "to": "risk_result:MR1"} in g["edges"]
     assert {"from": "source_span:DOC1:1-9", "to": "rule_version:R1"} in g["edges"]
 
 
@@ -149,3 +149,26 @@ def test_outage_blocks_append_and_material_transition_g24(app_client, tenant):
         ev.set_storage_outage(False)
     assert a.post(f"/api/v1/runs/{rid}/cancel").status_code == 200  # idempotent recovery
     assert [e["action"] for e in a.get(f"/api/v1/runs/{rid}/events").json()["items"]] == ["RUN_CREATED", "RUN_CANCELLED"]
+
+
+def test_alias_and_cross_correlation_parents_resolve_instead_of_reporting_false_missing_links(tenant):
+    """Engines call the margin entity `margin_result` in parents but record it as `risk_result`; snapshots/rules recorded under an
+    EARLIER correlation id (seed time) must be found across the tenant. Only a parent with NO event anywhere stays missing."""
+    from app.engines.evidence.lineage import build_lineage
+    with SessionLocal() as s:
+        ev.append(s, tenant, engine="risk", action="SNAPSHOT_PINNED", actor_id="u", actor_type="SERVICE", entity_type="risk_snapshot",
+                  entity_id="SNAP-X", correlation_id="seed-time")
+        ev.append(s, tenant, engine="risk", action="MARGIN_COMPUTED", actor_id="u", actor_type="SERVICE", entity_type="risk_result",
+                  entity_id="MR-X", correlation_id="run-x", payload={"parents": [{"entity_type": "risk_snapshot", "entity_id": "SNAP-X"},
+                                                                                {"entity_type": "rule_set", "entity_id": "HASH-NEVER-RECORDED"}]})
+        ev.append(s, tenant, engine="collateral", action="PROPOSAL_CREATED", actor_id="u", actor_type="SERVICE", entity_type="allocation_proposal",
+                  entity_id="P-X", correlation_id="run-x", payload={"parents": [{"entity_type": "margin_result", "entity_id": "MR-X"}]})
+        s.commit()
+        g = build_lineage(s, tenant, "run-x")
+    ids = {n["node_id"]: n for n in g["nodes"]}
+    assert "margin_result:MR-X" not in ids and ids["risk_result:MR-X"]["recorded"]
+    assert {"from": "risk_result:MR-X", "to": "allocation_proposal:P-X"} in g["edges"]
+    snap = ids["risk_snapshot:SNAP-X"]
+    assert snap["recorded"] and snap["external"] and snap["events"][0]["correlation_id"] == "seed-time"   # found across correlations
+    unresolved = [m for m in g["missing"] if m["kind"] == "PARENT_NOT_RECORDED"]
+    assert [m["node_id"] for m in unresolved] == ["rule_set:HASH-NEVER-RECORDED"]                         # genuinely absent stays missing

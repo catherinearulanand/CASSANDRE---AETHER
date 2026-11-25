@@ -36,7 +36,7 @@ def _lot_effective(lot: dict, sources: list[dict], target: str, add_pct=None) ->
         hit = None
         for i, e in enumerate(sched):
             if (e["asset_class"] == lot["asset_class"] and (not e.get("currency") or e["currency"] == lot["currency"])
-                    and (not e.get("issuer_class") or e["issuer_class"] == lot.get("issuer_class"))):
+                    and (not e.get("issuer_class") or e["issuer_class"] in ("ANY", lot.get("issuer_class")))):  # "ANY" = explicit wildcard
                 hit = (i, e)
                 break
         if hit is None:

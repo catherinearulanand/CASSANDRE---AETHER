@@ -23,6 +23,11 @@ class FakeUpstream:
         self.status = "OK"
         self.risk_down = False
         self.extra = {}
+        # contract v1.1 fakes. None => the service behaves as unavailable (explicit UNKNOWN downstream, never PASS)
+        self.positions = None          # dict like risk.get_positions
+        self.recon = None              # dict like risk.reconciliation_status
+        self.slacks = None             # list like collateral.constraint_slacks
+        self.posted_at = None          # callable(as_of)->amount str to model settlement over time; None => self.posted
 
     def get_result(self, session, tenant_id, result_id):
         if self.risk_down:
@@ -31,15 +36,39 @@ class FakeUpstream:
         return {"result_id": result_id, "status": self.status, "required_amount": self.required, "as_of": self.input_as_of, **self.extra}
 
     def coverage(self, session, tenant_id, account_id, as_of):
+        if self.posted_at is not None:
+            return {"eligible_posted": {"amount": self.posted_at(as_of), "currency": self.posted["currency"]}, "as_of": as_of.isoformat()}
         return {"eligible_posted": self.posted, "as_of": as_of.isoformat()}
+
+    def get_positions(self, session, tenant_id, account_id, as_of):
+        from app.core.errors import Unavailable
+        if self.positions is None:
+            raise Unavailable("risk.get_positions not available", code="SERVICE_NOT_IMPLEMENTED")
+        return self.positions
+
+    def reconciliation_status(self, session, tenant_id, account_id, as_of):
+        from app.core.errors import Unavailable
+        if self.recon is None:
+            raise Unavailable("risk.reconciliation_status not available", code="SERVICE_NOT_IMPLEMENTED")
+        return self.recon
+
+    def constraint_slacks(self, session, tenant_id, proposal_id):
+        from app.core.errors import Unavailable
+        if self.slacks is None:
+            raise Unavailable("collateral.constraint_slacks not available", code="SERVICE_NOT_IMPLEMENTED")
+        return self.slacks
 
 
 @pytest.fixture
 def up():
     f = FakeUpstream()
-    saved = {k: services._REGISTRY.get(k) for k in ("risk.get_result", "collateral.coverage", "regulatory.resolve_rules")}
+    saved = {k: services._REGISTRY.get(k) for k in ("risk.get_result", "collateral.coverage", "regulatory.resolve_rules", "risk.get_positions",
+                                                      "risk.reconciliation_status", "collateral.constraint_slacks")}
     services.register("risk.get_result", f.get_result)
     services.register("collateral.coverage", f.coverage)
+    services.register("risk.get_positions", f.get_positions)
+    services.register("risk.reconciliation_status", f.reconciliation_status)
+    services.register("collateral.constraint_slacks", f.constraint_slacks)
     services._REGISTRY.pop("regulatory.resolve_rules", None)
     yield f
     for k, v in saved.items():

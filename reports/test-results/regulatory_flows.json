@@ -1,0 +1,68 @@
+{
+ "base": "http://localhost:3101",
+ "rule_key": "DEMO-E2E-2214B149",
+ "steps": [
+  {
+   "step": "maker ingests fictional source",
+   "ok": true,
+   "seconds": 1.92,
+   "detail": "source ingested (2214B149)"
+  },
+  {
+   "step": "deterministic extraction shows candidate",
+   "ok": true,
+   "seconds": 0.55,
+   "detail": "2 table rows; candidate shows 1.10"
+  },
+  {
+   "step": "maker drafts rule from candidate",
+   "ok": true,
+   "seconds": 1.17,
+   "detail": "rule 5b146a12 drafted"
+  },
+  {
+   "step": "maker submits for review",
+   "ok": true,
+   "seconds": 0.23,
+   "detail": "status REVIEW REQUIRED"
+  },
+  {
+   "step": "maker cannot approve own rule (G15)",
+   "ok": true,
+   "seconds": 0.96,
+   "detail": "UI disabled; API 403 SELF_APPROVAL"
+  },
+  {
+   "step": "checker approves exact revision",
+   "ok": true,
+   "seconds": 1.4,
+   "detail": "APPROVED by independent checker; approval trail shows APPROVED"
+  },
+  {
+   "step": "checker schedules rule",
+   "ok": true,
+   "seconds": 1.1,
+   "detail": "SCHEDULED (effective 2027-02-01, after the pinned as-of)"
+  },
+  {
+   "step": "impact lab via real risk+collateral",
+   "ok": true,
+   "seconds": 1.88,
+   "detail": "INR 10,000,000 -> 12,500,000; posted 11,500,000; shortfall 1,000,000; feasibility optimal; HYPOTHETICAL"
+  },
+  {
+   "step": "rule state persisted",
+   "ok": true,
+   "seconds": 0.17,
+   "detail": "rule SCHEDULED; maker != checker recorded"
+  },
+  {
+   "step": "no unexpected console errors (only the deliberate G15 403)",
+   "ok": true,
+   "detail": {
+    "expected_403": 1,
+    "unexpected": []
+   }
+  }
+ ]
+}

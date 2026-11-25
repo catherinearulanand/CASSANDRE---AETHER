@@ -1,0 +1,13 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E17 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E17 to Master MA-EVAL-E17
+Party A: Larch Demo Bank. Party B: Quill Demo Clearing.
+Base Currency: USD.
+Effective Date: 2026-07-20.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Larch Demo Bank: USD 2,200,000.
+(b) Threshold with respect to Quill Demo Clearing: USD 2,200,000.
+
+Paragraph 5. Eligible Collateral.
+| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |
+| GOVT_BOND | USD | SOVEREIGN | 94% | 94% | 0% | none | AA | 10 |

@@ -29,11 +29,50 @@ Golden value reproduced independently: `fixtures/expected/evidence/golden_event.
 * A bundle verification proves: files match what the key-holder signed; included events recompute to their hashes; each belongs to the signed chain prefix. It does not prove the operator did not hold the key, completeness beyond the checkpoint, or admissibility.
 * Redacted bundles omit event content, prove chain membership only, and are marked `redacted: true` with a note that they do not contain the whole chain.
 
-## 4. Replay contract (proposal to engine owners; implemented on the evidence side)
-A replayable evidence event carries `payload["replay"] = {replayer, engine_version, method_version, business_hash, inputs, [values, tolerance]}` and the engine registers `services.register("replay.<engine>", fn)` returning `{engine_version, method_version, business_hash, [values]}`. The business hash must exclude run IDs, timestamps and audit sequence. Evidence runs the replayer inside a SAVEPOINT that is **always rolled back**, so replay cannot create reservations or any write. Status values: `MATCH`, `MATCH_WITHIN_TOLERANCE` (only with a declared tolerance on platform-dependent numerics), `DIVERGED` (first divergence reported), `NOT_REPLAYABLE` (missing version, unregistered replayer, or version drift — the current version is never silently substituted), `NOTHING_TO_REPLAY`. Cached REPLAY-mode extractions are reported with a caveat: replay of a cache is not generative determinism. **No engine currently emits `payload.replay`**, so on the integrated app replay reports `NOTHING_TO_REPLAY` until engine owners adopt the contract.
+## 4. Replay and lineage contract (v1.1, binding on engines; shape is frozen, only additions allowed)
 
-## 5. Lineage
-Nodes come from event `entity_type/entity_id`, `payload.parents` (list of `{entity_type, entity_id}`), `source_spans` (`document_id`, offsets) and explicit `evidence.record_lineage` edges. Stages: SOURCE → SPAN → RULE_TERMS → SNAPSHOT → METHOD → MARGIN → PROPOSAL → CONTROL → APPROVAL. Missing stages and parents that were referenced but never recorded are returned in `missing`; `complete` is true only with none. Engines must populate `payload.parents` for the graph to be meaningful (proposal to engine owners).
+### 4.1 Lineage: `payload.parents`
+Every evidence event for a consequential write SHOULD carry `payload["parents"] = [{"entity_type": str, "entity_id": str}, ...]` naming the
+recorded entities the event's own `entity_type/entity_id` was derived from. Rules:
+* `entity_type`/`entity_id` of the event is the **child**; each parent becomes an edge parent -> child.
+* A parent must itself be the `entity_type/entity_id` of some recorded event in the same tenant. Identity is by **canonical type**: `margin_result` and `margin`
+  are aliases of `risk_result` (same id = same node). A parent NOT recorded under the decision's own correlation id (seed-time snapshots, earlier approvals) is looked up
+  across the tenant; if found it is included, flagged `external: true`, and ITS parents are followed (depth <= 6, <= 300 nodes). Only a parent with no event anywhere in the
+  tenant is reported as `PARENT_NOT_RECORDED` (never hidden). Ids are strings; use the engine's stable id (`risk_result.result_id`, rule id, terms hash, ...).
+* The graph for a decision is built per `correlation_id`. Engines that compute inside a run must reuse the run's correlation id; seed-time or
+  cross-run parents are connected with `evidence.record_lineage(session, tenant, correlation_id, parent_type, parent_id, child_type, child_id)`.
+* Stage mapping (SOURCE, SPAN, RULE_TERMS, SNAPSHOT, METHOD, MARGIN, PROPOSAL, CONTROL, APPROVAL) is by `entity_type`. Recognised today:
+  `reg_source, contract_document` (SOURCE) · `reg_span, source_span` (SPAN) · `reg_rule, contract_terms, contract_package, contract_field, rule_set` (RULE_TERMS) ·
+  `risk_snapshot, risk_clearing_file, risk_import, col_snapshot, fact_snapshot, trade_mapping` (SNAPSHOT) · `reg_impact_run, method` (METHOD) ·
+  `risk_result, risk_stress` (MARGIN) · `col_proposal, col_instruction` (PROPOSAL) · `cmp_evaluation, cmp_case, cmp_control` (CONTROL) · `approval, cmp_waiver` (APPROVAL).
+  Unknown types fall back by prefix (`cmp_`, `col_`, `risk_`, `reg_`, `contract_`), else `OTHER` (kept in the graph, not counted as a stage).
+* `source_spans` on an event (`{document_id|source_id, span_id?, start|char_start, end|char_end}`) also create SOURCE and SPAN nodes automatically.
+* `complete` is true only when all nine stages have at least one recorded node and no referenced parent is unrecorded. A flow that legitimately has no
+  stage (e.g. ETD has no bilateral SOURCE terms) is reported as incomplete for that stage; this is intentional, the UI shows it explicitly.
+
+### 4.2 Replay: `payload.replay` and `replay.<engine>`
+A replayable event (a deterministic computation, not a human decision) carries
+`payload["replay"] = {"replayer": "replay.<engine>", "engine_version": str, "method_version": str, "business_hash": str, "inputs": {...}, "values"?: {k: decimal-string}, "tolerance"?: decimal-string}`
+and the engine registers `services.register("replay.<engine>", fn)` with
+`fn(session, tenant_id, spec) -> {"engine_version": str, "method_version": str, "business_hash": str, "values"?: {...}}`.
+* `spec` is exactly the recorded `payload["replay"]` dict. `inputs` must be **persisted references** (ids/hashes of immutable inputs, e.g. snapshot id,
+  terms hash, rule_set_hash, inventory snapshot id, margin result id), never live data and never the current clock; any as-of/known-at used must be inside `inputs`.
+* The replayer **recomputes** from those persisted inputs using the engine's *current code* and returns the version strings that code reports.
+  If they differ from the recorded versions the replay is `NOT_REPLAYABLE (VERSION_MISMATCH)`; the current version is never silently substituted.
+* The **business hash** = `evidence`-independent canonical hash (use `app.core.canonical.content_hash`) of the business outcome ONLY. Exclude: run/result/proposal ids
+  generated at compute time, timestamps, audit sequence numbers, `created_at`, correlation ids. Include: amounts (decimal strings), direction, status, legs, solver status,
+  rule/terms/snapshot hashes. Two computations of the same inputs must hash identically.
+* Platform-dependent numerics (LP solver values) may declare `tolerance` and put the compared decimals in `values`; then a hash mismatch is `MATCH_WITHIN_TOLERANCE` only if every value is within the tolerance, else `DIVERGED` with the first divergence.
+* Replayers MUST be read-only and MUST NOT call `evidence.append`, `emit`, reserve inventory or persist results. Evidence runs them inside a SAVEPOINT that is always rolled back
+  as a safety net, but a replayer that depends on writes is not replayable. A replayer that needs a stored result should read it (e.g. `risk.get_result`) and recompute.
+* Human decisions (approvals, reviews) are not replayed; they are lineage nodes. Events with no `payload.replay` are skipped; a run with none reports `NOTHING_TO_REPLAY`.
+* Statuses: `MATCH`, `MATCH_WITHIN_TOLERANCE`, `DIVERGED` (first divergence reported), `NOT_REPLAYABLE` (missing version, unregistered replayer, replayer error, version drift), `NOTHING_TO_REPLAY`.
+  Cached REPLAY-mode extractions (regulatory/contracts) carry a caveat: replaying a cache is not generative determinism.
+
+## 5. Lineage (implementation notes)
+Nodes come from event `entity_type/entity_id`, `payload.parents`, `source_spans` and explicit `evidence.record_lineage` edges; see 4.1 for the binding contract.
+The deep links `/evidence?run=<run_id>` and `/evidence?entity=<entity_id>` resolve to a correlation id (a run id maps to its `correlation_id`; an entity id is looked up
+across `ev_events.entity_id`/`payload.parents`, scoped to the caller's tenant, never revealing other tenants).
 
 ## 6. Operations
 * **Outage (G24):** `append` raises `Unavailable(EVIDENCE_UNAVAILABLE)` while evidence cannot be recorded; because engines append in the same transaction as the domain write, the transition is rolled back. Fault injection (`set_storage_outage`) is for tests/drills only and is not reachable over HTTP.

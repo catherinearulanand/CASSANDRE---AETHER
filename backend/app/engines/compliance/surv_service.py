@@ -4,11 +4,12 @@ from __future__ import annotations
 from datetime import timedelta
 
 import numpy as np
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
 
-from app.core.errors import Blocked, NotFound
+from app.core.errors import Blocked, Conflict, NotFound
 from app.core.events import emit
-from app.db.base import new_id, utcnow
+from app.db.base import lock_for_update, new_id, utcnow
 from app.engines.compliance import engine as E
 from app.engines.compliance import surveillance as S
 from app.engines.compliance.models import CmpCase, CmpJob, CmpModelVersion, CmpScore
@@ -41,13 +42,26 @@ def train_and_persist(session, tenant_id: str, actor: dict, seed: int = 42, n_ac
     drift_flag = res["drift_ratio"] > 2.0
     metrics = {"primary": res["primary"], "challenger": res["challenger"], "sensitivity": res["sensitivity"],
                "drift_ratio": res["drift_ratio"], "drift_suspected": drift_flag}
-    mv = CmpModelVersion(tenant_id=tenant_id, model_id=new_id(), name=S.MODEL_NAME, version=ver, status="ACTIVE", seed=seed,
+    def _mk(version: int) -> CmpModelVersion:
+        return CmpModelVersion(tenant_id=tenant_id, model_id=new_id(), name=S.MODEL_NAME, version=version, status="ACTIVE", seed=seed,
                          feature_definitions=card["features"], split=res["split"], training_data_hash=res["training_data_hash"],
                          parameters={"threshold": th, "normalisation": "median/MAD per account x regime (train only)",
                                      "n_accounts": n_accounts, "n_days": n_days}, threshold=float(th), metrics=metrics, model_card=card,
                          provenance="SYNTHETIC", source_ref="generator:surveillance/1")
-    session.add(mv)
-    session.flush()
+    for attempt in range(6):  # concurrent trainings race for the next version number: loser takes the next free one
+        mv = _mk(ver)
+        try:
+            with session.begin_nested():
+                session.add(mv)
+                session.flush()
+            break
+        except IntegrityError:
+            if mv in session:
+                session.expunge(mv)
+            ver = (session.execute(select(func.max(CmpModelVersion.version)).where(
+                CmpModelVersion.tenant_id == tenant_id, CmpModelVersion.name == S.MODEL_NAME)).scalar_one() or 0) + 1
+    else:
+        raise Conflict("could not allocate a model version (concurrent trainings)", code="MODEL_VERSION_CONFLICT")
     flagged_by_acct: dict[int, list[int]] = {}
     for part in ("validation", "holdout"):
         for i in np.where(res["masks"][part])[0]:
@@ -103,7 +117,11 @@ def get_model(session, tenant_id: str, model_id: str) -> CmpModelVersion:
 
 
 def set_model_status(session, tenant_id: str, model_id: str, status: str, actor: dict) -> CmpModelVersion:
-    m = get_model(session, tenant_id, model_id)
+    get_model(session, tenant_id, model_id)  # 404 for foreign tenants
+    q = select(CmpModelVersion).where(CmpModelVersion.tenant_id == tenant_id, CmpModelVersion.model_id == model_id)
+    m = session.execute(lock_for_update(q).execution_options(populate_existing=True)).scalar_one()
+    if m.status == status:
+        return m  # idempotent: no duplicate evidence for a no-op flip
     m.status = status
     E._ev(session, tenant_id, actor, f"SURVEILLANCE_MODEL_{status}", "model", m.model_id, m.version, m.model_id, {"status": status})
     return m

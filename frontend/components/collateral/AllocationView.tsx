@@ -45,7 +45,7 @@ export default function AllocationView({ ctx, selected, onSelect }: { ctx: Ctx; 
       </aside>
       <div style={{ minWidth: 0 }}>
         {!selected ? <EmptyState title="Select or create a proposal">Optimise to see legs, constraints, slack, exclusions and solver status.</EmptyState>
-          : detail.loading ? <EmptyState title="Loading proposal…" /> : detail.error ? <ErrorState error={detail.error} /> : <ProposalDetail p={detail.data!} />}
+          : detail.error ? <ErrorState error={detail.error} /> : !detail.data || detail.loading ? <EmptyState title="Loading proposal…" /> : <ProposalDetail p={detail.data} />}
       </div>
     </div>
   );

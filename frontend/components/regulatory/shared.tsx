@@ -57,26 +57,47 @@ export function Json({ v }: { v: unknown }) {
 }
 
 /** Approval/confirm dialog: mandatory reason, before/after facts, hashes, actor; disabled while pending; no fake success. */
+const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
+
 export function ReasonDialog({ title, facts, confirmLabel, onConfirm, onClose, tone = "primary" }: {
   title: string; facts: [string, ReactNode][]; confirmLabel: string; tone?: "primary" | "danger";
   onConfirm: (reason: string) => Promise<void>; onClose: () => void;
 }) {
   const [reason, setReason] = useState(""); const [busy, setBusy] = useState(false); const [err, setErr] = useState<ApiError | null>(null);
-  const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { ref.current?.focus(); }, []);
+  const ref = useRef<HTMLTextAreaElement>(null); const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Modal behaviour: remember the trigger, move focus in, lock background scroll, and on close give focus back
+    // (to the trigger if it still exists and is enabled, otherwise to the page heading so keyboard users keep their place).
+    const opener = document.activeElement as HTMLElement | null;
+    ref.current?.focus();
+    const prev = document.body.style.overflow; document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+      if (opener && opener.isConnected && !(opener as HTMLButtonElement).disabled) opener.focus();
+      else { const h = document.querySelector<HTMLElement>("main h1"); if (h) { h.setAttribute("tabindex", "-1"); h.focus(); } }
+    };
+  }, []);
   async function go() {
     setBusy(true); setErr(null);
     try { await onConfirm(reason.trim()); onClose(); } catch (e) { setErr(e as ApiError); } finally { setBusy(false); }
   }
+  function key(e: React.KeyboardEvent) {
+    if (e.key === "Escape" && !busy) { e.stopPropagation(); onClose(); return; }
+    if (e.key !== "Tab" || !box.current) return;
+    const f = Array.from(box.current.querySelectorAll<HTMLElement>(FOCUSABLE)); if (f.length === 0) return;
+    const first = f[0], last = f[f.length - 1], cur = document.activeElement;
+    if (e.shiftKey && (cur === first || !box.current.contains(cur))) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && (cur === last || !box.current.contains(cur))) { e.preventDefault(); first.focus(); }
+  }
   return (
-    <div role="dialog" aria-modal="true" aria-labelledby="dlg-title" onKeyDown={e => { if (e.key === "Escape" && !busy) onClose(); }}
+    <div role="dialog" aria-modal="true" aria-labelledby="dlg-title" aria-describedby="dlg-facts" onKeyDown={key}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", zIndex: 50, padding: 12 }}>
-      <div className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto" }}>
+      <div className="card" ref={box} style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflow: "auto" }}>
         <h2 id="dlg-title">{title}</h2>
-        <table><tbody>{facts.map(([k, v]) => <tr key={k}><th scope="row" style={{ width: 150 }}>{k}</th><td className="mono" style={{ wordBreak: "break-all" }}>{v}</td></tr>)}</tbody></table>
+        <table id="dlg-facts"><caption className="sr-only">Details of the action you are about to record</caption><tbody>{facts.map(([k, v]) => <tr key={k}><th scope="row" style={{ width: 150 }}>{k}</th><td className="mono" style={{ wordBreak: "break-all" }}>{v}</td></tr>)}</tbody></table>
         <label htmlFor="reason" style={{ marginTop: 12 }}>Reason (mandatory, recorded as evidence)</label>
         <textarea id="reason" ref={ref} value={reason} onChange={e => setReason(e.target.value)} rows={3} style={{ width: "100%", padding: 8 }} aria-required="true" />
-        {err && <div style={{ marginTop: 8 }}><ErrorState error={err} />{Object.entries(err.body.field_errors ?? {}).map(([k, v]) => <div className="field-error" key={k}>{k}: {v}</div>)}</div>}
+        {err && <div style={{ marginTop: 8 }} role="alert"><ErrorState error={err} />{Object.entries(err.body.field_errors ?? {}).map(([k, v]) => <div className="field-error" key={k}>{k}: {v}</div>)}</div>}
         <div className="row" style={{ marginTop: 12, justifyContent: "flex-end" }}>
           <button onClick={onClose} disabled={busy}>Cancel</button>
           <button className={tone === "danger" ? "" : "primary"} disabled={busy || !reason.trim()} onClick={go}>{busy ? "Working…" : confirmLabel}</button>

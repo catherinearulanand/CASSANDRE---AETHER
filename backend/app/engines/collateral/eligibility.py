@@ -79,7 +79,8 @@ def match_entry(schedule: list[dict], lot) -> tuple[int, dict] | None:
             continue
         if e.get("currency") and e["currency"] != lot.currency:
             continue
-        if e.get("issuer_class") and e["issuer_class"] != lot.issuer_class:
+        ic = e.get("issuer_class")
+        if ic and ic != "ANY" and ic != lot.issuer_class:  # "ANY" = explicit wildcard (COVENANT vocabulary); unknown lot class never matches a specific class
             continue
         return i, e
     return None

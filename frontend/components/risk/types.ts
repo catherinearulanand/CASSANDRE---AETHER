@@ -7,7 +7,7 @@ export interface TradeVal {
 }
 export interface MarginResult {
   result_id: string; market_type: string; status: "OK" | "BLOCKED" | "UNSUPPORTED"; blocking_reasons: string[];
-  currency: string | null; account_id: string | null; netting_set_id: string | null; as_of: string;
+  currency: string | null; account_id: string | null; netting_set_id: string | null; as_of: string; snapshot_as_of: string | null;
   exposure: Amt | null; required_amount: Amt | null; direction: "POST" | "RETURN" | "NONE";
   unrounded_amount: Amt | null; rounded_amount: Amt | null; components: Component[]; waterfall: WaterfallStep[];
   input_hashes: string[]; snapshot_id: string | null; terms_hash: string | null; rule_set_hash: string | null;
@@ -15,7 +15,7 @@ export interface MarginResult {
   quality: Record<string, unknown>; trade_valuations: TradeVal[];
   netting: { gross_positive: Amt; gross_negative: Amt; net: Amt; netting_benefit: Amt; netting_benefit_definition: string } | null;
   baseline_amount?: Amt; internal_estimate: null | { label: string; estimated_loss: string; shock_pct: string; metrics: Record<string, string>; by_instrument: Record<string, string>[] };
-  result_hash: string;
+  result_hash: string; context_used?: Record<string, unknown> | null;
 }
 export interface Snapshot { snapshot_id: string; data_as_of: string; content_hash: string; max_age_seconds: number; curves: string[]; fx_pairs: string[] }
 export interface ClearingFile {
@@ -37,3 +37,13 @@ export const ETD_ACCOUNT: Record<string, { account: string; venue: string }> = {
 export const DIRECTION_TEXT: Record<string, string> = {
   POST: "POST — obligor posts collateral (call)", RETURN: "RETURN — excess collateral is returned", NONE: "NONE — no transfer required",
 };
+
+export interface TermsInfo { status: string; terms_hash: string | null; blocking_reasons: string[]; known_at: string; known_at_source?: string }
+export interface PositionMetrics {
+  account_id: string; gross_lots: string | null; net_lots: string | null; delta_equivalent_lots: string | null; notional: string | null;
+  currency: string | null; client_class: string; client_class_note: string; as_of: string | null; source: string | null; warnings: string[]; available: boolean;
+}
+export interface ReconStatus {
+  status: "OK" | "EXCEPTION" | "UNKNOWN"; expected_total: string | null; imported_total: string | null; difference: string | null;
+  currency: string | null; file_id: string | null; revision?: number; reason: string | null;
+}

@@ -138,6 +138,22 @@ def record_facts(body: FactsIn, request: Request, db: Session = Depends(get_db),
     return _idem(db, p, key, "contracts.facts", body.model_dump(), lambda: S.record_facts(db, p, _cid(request), body.facts))
 
 
+class ResolveRecordIn(BaseModel):
+    netting_set_id: str
+    as_of: str
+    known_at: str | None = None
+    fact_snapshot_id: str | None = None
+
+
+@router.post("/resolve/record")
+def resolve_record(body: ResolveRecordIn, request: Request, p: Principal = Depends(current_principal), db: Session = Depends(get_db),
+                   idem: str | None = IDEM):
+    """Audited resolution: records an evidence event with a replay spec (known_at is pinned so it stays reproducible)."""
+    out, _ = run_idempotent(db, p.tenant_id, idem, "contracts.resolve.record", body.model_dump(), lambda: S.record_resolution(
+        db, p, _cid(request), body.netting_set_id, _dt(body.as_of, "as_of"), _dt(body.known_at, "known_at"), body.fact_snapshot_id))
+    return out
+
+
 @router.get("/resolve")
 def resolve(netting_set_id: str, as_of: str, known_at: str | None = None, fact_snapshot_id: str | None = None,
             db: Session = Depends(get_db), p: Principal = Depends(current_principal)):

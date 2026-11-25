@@ -39,7 +39,7 @@
       ],
       "fx_to_target": null,
       "issuer": "Demo Treasury",
-      "issuer_class": null,
+      "issuer_class": "SOVEREIGN",
       "issuer_group": "IG-UST",
       "lot_id": "GSEC-USD-OTC",
       "lot_size": "0",

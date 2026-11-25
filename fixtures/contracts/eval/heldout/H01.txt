@@ -1,0 +1,24 @@
+FICTIONAL HELD-OUT CREDIT SUPPORT ANNEX H01 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-HELD-H01 to Master MA-HELD-H01
+Party A: Sable Demo Capital. Party B: Tern Demo Partners.
+Base Currency: USD.
+Effective Date: 2026-09-01.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Sable Demo Capital: USD 12,345,678.90.
+(b) Threshold with respect to Tern Demo Partners: USD 8,000,000.
+
+Paragraph 2. Rating Trigger. If the Credit Rating of Sable Demo Capital is below BB+ on the relevant Valuation Date, the Threshold with respect to Sable Demo Capital is USD 1,000,000.
+
+Paragraph 3. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Sable Demo Capital: USD 350,000.
+(b) Minimum Transfer Amount with respect to Tern Demo Partners: USD 350,000.
+A transfer is required only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.
+
+Paragraph 4. Independent Amount.
+(a) Independent Amount with respect to Sable Demo Capital: USD 750,000.
+(b) Independent Amount with respect to Tern Demo Partners: USD 0.
+
+Paragraph 5. Rounding. Delivery Amounts and Return Amounts are rounded half even to the nearest integral multiple of USD 25,000.
+
+Paragraph 6. Segregation. Initial Margin, if any, is held in segregated accounts.

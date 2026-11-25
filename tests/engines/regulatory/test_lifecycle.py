@@ -282,5 +282,5 @@ def test_every_consequential_write_emitted_valid_chained_evidence(env):
     registry.review(env.db, env.checker, r.rule_id, "APPROVE", "ok", None)
     registry.activate(env.db, env.checker, r.rule_id, None, "go", as_of=dt("2026-08-01T00:00:00Z"))
     env.db.flush()
-    assert actions(env) == ["SOURCE_INGESTED", "RULE_DRAFTED", "RULE_SUBMITTED", "RULE_APPROVED", "RULE_ACTIVATED"]
+    assert actions(env) == ["SOURCE_INGESTED", "RULE_DRAFTED", "RULE_SUBMITTED", "RULE_APPROVED", "APPROVAL_RECORDED", "RULE_ACTIVATED"]
     assert ev.verify_chain(env.db, env.tenant)["valid"]

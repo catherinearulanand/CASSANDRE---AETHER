@@ -1,0 +1,30 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E01 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E01 to Master MA-EVAL-E01
+Party A: Halcyon Demo Securities. Party B: Juniper Demo Fund.
+Base Currency: USD.
+Effective Date: 2026-02-01.
+
+Paragraph 1. Segregation. Initial Margin, if any, is not held in segregated accounts.
+
+Paragraph 2. Rounding. Delivery Amounts and Return Amounts are rounded half up to the nearest integral multiple of USD 50,000.
+
+Paragraph 3. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Halcyon Demo Securities: USD 250,000.
+(b) Minimum Transfer Amount with respect to Juniper Demo Fund: USD 400,000.
+A transfer is required only if the unrounded amount is greater than or equal to the Minimum Transfer Amount.
+
+Paragraph 4. Threshold.
+(a) Threshold with respect to Halcyon Demo Securities: USD 2,500,000.
+(b) Threshold with respect to Juniper Demo Fund: USD 1,250,000.50.
+
+Paragraph 5. Independent Amount.
+(a) Independent Amount with respect to Halcyon Demo Securities: USD 0.
+(b) Independent Amount with respect to Juniper Demo Fund: USD 1,000,000.
+
+Paragraph 6. Eligible Collateral.
+| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |
+| CASH | USD | ANY | 100% | 0% | 0% | none | none | none |
+| GOVT_BOND | USD | SOVEREIGN | 94% | 6% | 0% | 40% of obligation | AA | 10 |
+
+Close-out netting applies across all Transactions under Master MA-EVAL-E01, which together form the netting set NS-EVAL-E01.
+The Valuation Agent is Halcyon Demo Securities.

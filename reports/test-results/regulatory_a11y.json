@@ -1,0 +1,110 @@
+[
+ {
+  "check": "command: exactly one h1",
+  "ok": true,
+  "detail": 1
+ },
+ {
+  "check": "command: no positive tabindex",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: tab command - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "workbench: exactly one h1",
+  "ok": true,
+  "detail": 1
+ },
+ {
+  "check": "workbench: no positive tabindex",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: tab workbench - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "versions: exactly one h1",
+  "ok": true,
+  "detail": 1
+ },
+ {
+  "check": "versions: no positive tabindex",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: tab versions - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "impact: exactly one h1",
+  "ok": true,
+  "detail": 1
+ },
+ {
+  "check": "impact: no positive tabindex",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: tab impact - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "axe: rule detail - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "dialog: focus moves into the dialog on open",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: approval dialog open - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "dialog: Tab/Shift+Tab cannot leave the modal",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "dialog: Escape closes and focus RETURNS to the trigger",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "tablist: ArrowRight selects and focuses the next tab",
+  "ok": true,
+  "detail": {
+   "selected": "Source workbench",
+   "focused": "tab:Source workbench"
+  }
+ },
+ {
+  "check": "focus is visible on inputs (outline)",
+  "ok": true,
+  "detail": "solid 2px"
+ },
+ {
+  "check": "impact result is in a polite live region",
+  "ok": true,
+  "detail": 0
+ },
+ {
+  "check": "axe: impact result - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ }
+]

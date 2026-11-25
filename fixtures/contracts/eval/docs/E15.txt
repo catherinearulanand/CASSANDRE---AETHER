@@ -1,0 +1,24 @@
+FICTIONAL EVAL CREDIT SUPPORT ANNEX E15 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-EVAL-E15 to Master MA-EVAL-E15
+Party A: Larch Demo Bank. Party B: Quill Demo Clearing.
+Base Currency: USD.
+Effective Date: 2026-05-20.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Larch Demo Bank: USD 0.
+(b) Threshold with respect to Quill Demo Clearing: USD 0.
+
+Paragraph 2. Minimum Transfer Amount.
+(a) Minimum Transfer Amount with respect to Larch Demo Bank: USD 0.
+(b) Minimum Transfer Amount with respect to Quill Demo Clearing: USD 500,000.
+A transfer is required only if the unrounded amount is greater than the Minimum Transfer Amount.
+
+Paragraph 3. Independent Amount.
+(a) Independent Amount with respect to Larch Demo Bank: USD 2,000,000.
+(b) Independent Amount with respect to Quill Demo Clearing: USD 0.
+
+Paragraph 4. Rounding. Delivery Amounts and Return Amounts are rounded down to the nearest integral multiple of USD 1.
+
+Paragraph 5. Calls. A Delivery Amount is requested by notice no later than 13:00 on the Local Business Day following the Valuation Date.
+The Valuation Agent is Quill Demo Clearing.
+Close-out netting applies across all Transactions under Master MA-EVAL-E15, which together form the netting set NS-EVAL-E15.

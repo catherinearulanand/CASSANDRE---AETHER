@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.security import Principal, require_distinct_checker
 from app.core import services
@@ -28,19 +29,61 @@ from app.engines.contracts.models import (ConDocument, ConEligibility, ConFactSn
 
 MAX_DOC_CHARS = 500_000
 MIN_REASON = 8
+ENGINE_VERSION = "covenant/2.0"
+METHOD_VERSION = "terms-resolution/1"  # bump when resolution/bundle-hash semantics change; old events then replay as VERSION_MISMATCH
+
+
+def _insert_ignore(db, model, values: dict) -> None:
+    """Insert-if-absent that is safe under concurrency (PostgreSQL raised a unique violation for the second concurrent
+    resolver of identical content; SQLite's serialised writer had masked it). Content-addressed rows only."""
+    dialect = db.get_bind().dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert as ins
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert as ins
+    else:  # pragma: no cover - other dialects: savepoint fallback
+        try:
+            with db.begin_nested():
+                db.add(model(**values))
+        except IntegrityError:
+            pass
+        return
+    db.execute(ins(model).values(**values).on_conflict_do_nothing())
 
 
 def iso(d: datetime) -> str:
     return d.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _replay_spec(business_hash: str, inputs: dict) -> dict:
+    """payload.replay contract (docs/agent-handoffs/CONTRACTS.md v1.1). The business hash excludes run IDs, timestamps
+    and audit sequence numbers by construction (it is the content hash of bundle + terms + facts)."""
+    return {"replayer": "replay.contracts", "engine_version": ENGINE_VERSION, "method_version": METHOD_VERSION,
+            "business_hash": business_hash, "inputs": inputs}
+
+
+def _parents(*pairs):
+    seen, out = set(), []
+    for t, i in pairs:
+        if (t, i) not in seen:
+            seen.add((t, i))
+            out.append({"entity_type": t, "entity_id": i})
+    return out
+
+
 def _ev(db, p: Principal, corr: str, action: str, etype: str, eid: str, *, rationale=None, payload=None,
-        input_hashes=None, output_hash=None, effective_at=None, mode="RULES", revision=1, spans=None):
+        input_hashes=None, output_hash=None, effective_at=None, mode="RULES", revision=1, spans=None,
+        parents=None, replay=None):
+    payload = dict(payload or {})
+    if parents:
+        payload["parents"] = parents
+    if replay:
+        payload["replay"] = replay
     return services.call("evidence.append", db, p.tenant_id, engine="contracts", action=action, actor_id=p.user_id,
                          actor_type="USER", actor_role=",".join(p.roles), entity_type=etype, entity_id=eid,
                          entity_revision=revision, correlation_id=corr, effective_at=effective_at, source_mode=mode,
                          input_hashes=input_hashes or [], source_spans=spans or [], output_hash=output_hash,
-                         rationale=rationale, payload=payload or {})
+                         rationale=rationale, payload=payload)
 
 
 def _scope(p: Principal) -> None:
@@ -181,15 +224,26 @@ def create_package(db, p: Principal, corr: str, body: dict) -> dict:
                      party_a_id=body["party_a_id"], party_b_id=body["party_b_id"], party_a_name=names[0], party_b_name=names[1],
                      base_currency=body["base_currency"], governing_law=body["governing_law"], created_by=p.user_id,
                      source_ref=body["csa_id"])
-    db.add(pkg)
-    db.flush()
-    shas = []
+    try:
+        with db.begin_nested():  # SAVEPOINT: a concurrent creator of the same netting set loses cleanly (no raw 500)
+            db.add(pkg)
+            db.flush()
+    except IntegrityError:
+        other = db.execute(select(ConPackage).where(ConPackage.tenant_id == p.tenant_id,
+                                                    ConPackage.netting_set_id == body["netting_set_id"])).scalar_one_or_none()
+        code = "CROSS_MASTER_NETTING_SET" if other is not None and other.master_id != body["master_id"] else "NETTING_SET_EXISTS"
+        raise Conflict(f"Netting set {body['netting_set_id']} was registered concurrently; "
+                       "a netting set belongs to exactly one master (no cross-master netting)", code=code) from None
+    shas, doc_ids = [], []
     for v in vdocs:
-        shas.append(_add_doc(db, p, pkg, v).sha256)
+        d = _add_doc(db, p, pkg, v)
+        shas.append(d.sha256)
+        doc_ids.append(d.doc_id)
     _ev(db, p, corr, "CONTRACT_PACKAGE_CREATED", "contract_package", pkg.package_id,
         payload={"master_id": pkg.master_id, "csa_id": pkg.csa_id, "netting_set_id": pkg.netting_set_id,
                  "documents": [{"doc_ref": v["doc_ref"], "kind": v["kind"]} for v in vdocs]},
-        input_hashes=shas, mode="MANUAL", rationale="Agreement package registered (document metadata only; not an enforceability opinion)")
+        input_hashes=shas, mode="MANUAL", rationale="Agreement package registered (document metadata only; not an enforceability opinion)",
+        parents=_parents(*(("contract_document", i) for i in doc_ids)))
     return package_detail(db, p.tenant_id, pkg.package_id)
 
 
@@ -333,6 +387,7 @@ def review_field(db, p: Principal, corr: str, package_id: str, field_id: str, ac
     _ev(db, p, corr, "CONTRACT_FIELD_REVIEWED", "contract_field", f.field_id, rationale=reason, revision=f.revision,
         mode="MANUAL", input_hashes=[doc.sha256], output_hash=content_hash({"v": f.value, "s": f.status}),
         spans=[{"doc_sha256": doc.sha256, "start": f.start_char, "end": f.end_char, "quote": f.quote}],
+        parents=_parents(("contract_document", doc.doc_id)),
         payload={"package_id": pkg.package_id, "field_key": f.field_key, "action": action, "status_before": before["status"],
                  "status_after": f.status, "value_hash_before": content_hash({"v": before["value"]}),
                  "value_hash_after": content_hash({"v": f.value})})
@@ -340,6 +395,13 @@ def review_field(db, p: Principal, corr: str, package_id: str, field_id: str, ac
 
 
 # ----------------------------------------------------------------------------------------- freeze
+def _bundle_hash(package_static: dict, entries: list) -> str:
+    """Single definition of the frozen-bundle hash, used at freeze time AND by replay (so they cannot drift apart)."""
+    hash_entries = sorted(({k: e[k] for k in ("key", "direction", "value", "condition", "effective_from", "rank", "doc_sha256", "start", "end")}
+                           for e in entries), key=lambda e: canonical_bytes(e))
+    return content_hash({"package": package_static, "entries": hash_entries})
+
+
 def _candidate(db, pkg: ConPackage) -> tuple[list[dict], list[str], str, list[ConField]]:
     fields, docs = _fields(db, pkg), {d.doc_id: d for d in _docs(db, pkg)}
     entries = []
@@ -357,11 +419,8 @@ def _candidate(db, pkg: ConPackage) -> tuple[list[dict], list[str], str, list[Co
     net = [e for e in entries if e["key"] == "netting_authorization" and not e["condition"]]
     if net and not any(e["value"] is True for e in net):
         blocking.append("NETTING_NOT_AUTHORISED")
-    hash_entries = sorted(({k: e[k] for k in ("key", "direction", "value", "condition", "effective_from", "rank", "doc_sha256", "start", "end")}
-                           for e in entries), key=lambda e: canonical_bytes(e))
-    bundle = content_hash({"package": {"master_id": pkg.master_id, "csa_id": pkg.csa_id, "netting_set_id": pkg.netting_set_id,
-                                       "party_a_id": pkg.party_a_id, "party_b_id": pkg.party_b_id,
-                                       "base_currency": pkg.base_currency}, "entries": hash_entries})
+    bundle = _bundle_hash({"master_id": pkg.master_id, "csa_id": pkg.csa_id, "netting_set_id": pkg.netting_set_id,
+                           "party_a_id": pkg.party_a_id, "party_b_id": pkg.party_b_id, "base_currency": pkg.base_currency}, entries)
     return entries, sorted(set(blocking)), bundle, fields
 
 
@@ -369,9 +428,16 @@ def readiness(db, tenant_id: str, package_id: str) -> dict:
     pkg = get_package(db, tenant_id, package_id)
     entries, blocking, bundle, _ = _candidate(db, pkg)
     vers = _versions(db, pkg)
+    # The currently VALID pending approval (same hash + revision, unexpired): lets an independent checker, in a different
+    # session, find what the maker proposed. A stale/expired one is never shown as actionable.
+    pend = db.execute(select(ApprovalRow).where(ApprovalRow.tenant_id == tenant_id, ApprovalRow.target_id == pkg.package_id,
+                                                ApprovalRow.action_type == "TERMS_FREEZE", ApprovalRow.decision == "PENDING",
+                                                ApprovalRow.target_hash == bundle, ApprovalRow.target_revision == pkg.revision,
+                                                ApprovalRow.expires_at > utcnow()).order_by(ApprovalRow.created_at.desc())).scalars().first()
     return {"ready_to_freeze": not blocking and not (vers and vers[-1].bundle_hash == bundle), "blocking_reasons": blocking,
             "candidate_bundle_hash": bundle, "required_fields": T.REQUIRED_KEYS,
-            "unchanged_from_latest_frozen": bool(vers and vers[-1].bundle_hash == bundle)}
+            "unchanged_from_latest_frozen": bool(vers and vers[-1].bundle_hash == bundle),
+            "pending_approval": approval_out(pend) if pend is not None else None}
 
 
 def propose_freeze(db, p: Principal, corr: str, package_id: str, reason: str | None) -> dict:
@@ -397,8 +463,8 @@ def propose_freeze(db, p: Principal, corr: str, package_id: str, reason: str | N
         db.add(ap)
         db.flush()
         _ev(db, p, corr, "TERMS_FREEZE_PROPOSED", "contract_terms", pkg.package_id, rationale=reason, revision=pkg.revision,
-            mode="MANUAL", output_hash=bundle, payload={"approval_id": ap.approval_id, "bundle_hash": bundle,
-                                                         "approved_entries": len(entries)})
+            mode="MANUAL", output_hash=bundle, parents=_parents(*(("contract_field", e["field_id"]) for e in entries)),
+            payload={"approval_id": ap.approval_id, "bundle_hash": bundle, "approved_entries": len(entries)})
     return approval_out(ap)
 
 
@@ -450,11 +516,17 @@ def freeze(db, p: Principal, corr: str, package_id: str, approval_id: str, reaso
     pkg.status = "FROZEN"
     db.flush()
     spans = [{"doc_sha256": e["doc_sha256"], "start": e["start"], "end": e["end"], "quote": e["quote"], "key": e["key"]} for e in entries]
-    _ev(db, p, corr, "TERMS_APPROVED", "contract_terms", pkg.package_id, rationale=reason, revision=ver.version_no, mode="MANUAL",
+    field_parents = _parents(*(("contract_field", e["field_id"]) for e in entries))
+    frozen_replay = _replay_spec(bundle, {"kind": "FROZEN_BUNDLE", "version_id": ver.version_id})
+    # The approval is its own lineage node (APPROVAL stage): fields -> approval -> frozen terms.
+    _ev(db, p, corr, "TERMS_APPROVED", "approval", ap.approval_id, rationale=reason, revision=ver.version_no, mode="MANUAL",
         output_hash=bundle, input_hashes=[d.sha256 for d in docs],
+        parents=field_parents,
         payload={"approval_id": ap.approval_id, "maker_id": ap.maker_id, "checker_id": p.user_id, "bundle_hash": bundle})
     _ev(db, p, corr, "TERMS_FROZEN", "contract_terms", pkg.package_id, rationale=reason, revision=ver.version_no, mode="MANUAL",
         output_hash=bundle, input_hashes=[d.sha256 for d in docs], spans=spans,
+        parents=field_parents + _parents(("approval", ap.approval_id)),
+        replay=frozen_replay,
         payload={"version_id": ver.version_id, "version_no": ver.version_no, "netting_set_id": pkg.netting_set_id,
                  "supersedes": ver.supersedes_version_id, "bundle_hash": bundle})
     for et in ("TermsApproved", "TermsFrozen"):
@@ -516,12 +588,64 @@ def resolve_terms(db, tenant_id: str, netting_set_id: str, as_of: datetime, know
     terms = T.terms_output(values, ver.pkg_static)
     h = content_hash({"bundle_hash": ver.bundle_hash, "netting_set_id": netting_set_id, "terms": terms, "facts_hash": fh})
     if db.get(ConResolution, (tenant_id, h)) is None:
-        db.add(ConResolution(tenant_id=tenant_id, terms_hash=h, netting_set_id=netting_set_id, version_id=ver.version_id,
-                             as_of=as_of, fact_snapshot_id=fact_snapshot_id, terms=terms))
-        db.flush()
+        _insert_ignore(db, ConResolution, dict(tenant_id=tenant_id, terms_hash=h, netting_set_id=netting_set_id,
+                                               version_id=ver.version_id, as_of=as_of, fact_snapshot_id=fact_snapshot_id,
+                                               terms=terms))
     base.update(status="RESOLVED", terms_hash=h, terms=terms, blocking_reasons=[],
                 source_ids=sorted({e["doc_sha256"] for e in ver.entries}), bundle_hash=ver.bundle_hash)
     return base
+
+
+def _resolution_business_hash(res: dict) -> str:
+    """Business hash of a resolution: the terms hash when RESOLVED, else a hash of the explicit blocking outcome."""
+    if res["status"] == "RESOLVED":
+        return res["terms_hash"]
+    return content_hash({"status": "BLOCKED", "reasons": sorted(res["blocking_reasons"])})
+
+
+def record_resolution(db, p: Principal, corr: str, netting_set_id: str, as_of: datetime, known_at, fact_snapshot_id) -> dict:
+    """Audited resolution (evidence + replay spec). known_at is pinned (defaults to now) so the event stays replayable
+    later even after newer versions are frozen (bitemporal; C-A08)."""
+    _scope(p)
+    _need_role(p, "maker", "checker", "compliance_officer", "tenant_admin")
+    known = known_at or utcnow()
+    res = resolve_terms(db, p.tenant_id, netting_set_id, as_of, known, fact_snapshot_id)
+    pkg = db.execute(select(ConPackage).where(ConPackage.tenant_id == p.tenant_id,
+                                              ConPackage.netting_set_id == netting_set_id)).scalar_one_or_none()
+    bh = _resolution_business_hash(res)
+    known_s = known.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    inputs = {"kind": "RESOLUTION", "netting_set_id": netting_set_id, "as_of": iso(as_of), "known_at": known_s,
+              "fact_snapshot_id": fact_snapshot_id}
+    ev = _ev(db, p, corr, "TERMS_RESOLVED" if res["status"] == "RESOLVED" else "TERMS_RESOLUTION_BLOCKED", "terms_version",
+             res["terms_hash"] or bh, mode="MANUAL", effective_at=as_of, output_hash=bh,
+             rationale="; ".join(res["blocking_reasons"]) or f"Resolved at as_of {iso(as_of)} (known_at pinned)",
+             parents=_parents(("contract_terms", pkg.package_id)) if pkg is not None else None,
+             replay=_replay_spec(bh, inputs),
+             payload={"status": res["status"], "netting_set_id": netting_set_id, "version_no": res.get("version_no"),
+                      "blocking_reasons": res["blocking_reasons"], "fact_snapshot_id": fact_snapshot_id})
+    return {**res, "evidence_event_id": ev.event_id, "known_at": known_s}
+
+
+def replay_contracts(session, tenant_id: str, spec: dict) -> dict:
+    """replay.contracts: re-derive the business hash from PERSISTED inputs only (read-only; the caller rolls back).
+    FROZEN_BUNDLE -> recompute the bundle hash from the stored version entries (detects any post-freeze alteration);
+    RESOLUTION    -> re-resolve at the pinned as_of/known_at/fact snapshot (historical terms are reproduced even after
+                     later amendments, because known_at pins the version)."""
+    inp = spec.get("inputs") or {}
+    out = {"engine_version": ENGINE_VERSION, "method_version": METHOD_VERSION}
+    if inp.get("kind") == "FROZEN_BUNDLE":
+        ver = session.get(ConVersion, inp.get("version_id"))
+        if ver is None or ver.tenant_id != tenant_id:
+            raise NotFound("Frozen version not found")
+        static = {"master_id": ver.master_id, "csa_id": ver.source_ref, "netting_set_id": ver.netting_set_id, **ver.pkg_static}
+        out["business_hash"] = _bundle_hash(static, ver.entries)
+        return out
+    if inp.get("kind") == "RESOLUTION":
+        res = resolve_terms(session, tenant_id, inp["netting_set_id"], T.parse_dt(inp["as_of"]), T.parse_dt(inp["known_at"]),
+                            inp.get("fact_snapshot_id"))
+        out["business_hash"] = _resolution_business_hash(res)
+        return out
+    raise ValidationFailed("replay spec has unknown inputs.kind", field_errors={"inputs.kind": "unsupported"})
 
 
 def terms_by_hash(db, tenant_id: str, terms_hash: str) -> dict | None:
@@ -536,12 +660,16 @@ def register_trade(db, p: Principal, corr: str, trade_id: str, declared_master_i
     _need_role(p, "maker", "tenant_admin")
     if not trade_id or not trade_id.strip():
         raise ValidationFailed("trade_id required", field_errors={"trade_id": "required"})
-    ex = db.execute(select(ConNettingMembership).where(ConNettingMembership.tenant_id == p.tenant_id,
-                                                       ConNettingMembership.trade_id == trade_id)).scalar_one_or_none()
     pkg = None
     if declared_ns:
-        pkg = db.execute(select(ConPackage).where(ConPackage.tenant_id == p.tenant_id,
-                                                  ConPackage.netting_set_id == declared_ns)).scalar_one_or_none()
+        # Lock the agreement row: serialises with field approvals that change netting authorisation and with
+        # concurrent registrations of trades into the same agreement.
+        pkg = db.execute(lock_for_update(select(ConPackage).where(ConPackage.tenant_id == p.tenant_id,
+                                                                  ConPackage.netting_set_id == declared_ns))
+                         .execution_options(populate_existing=True)).scalar_one_or_none()
+    ex = db.execute(select(ConNettingMembership).where(ConNettingMembership.tenant_id == p.tenant_id,
+                                                       ConNettingMembership.trade_id == trade_id)
+                    .execution_options(populate_existing=True)).scalar_one_or_none()
     if pkg is None:
         status, ns, master = "QUARANTINED", None, None
         reason = (f"UNKNOWN_MAPPING: netting set {declared_ns!r} is not a registered agreement" if declared_ns
@@ -560,16 +688,27 @@ def register_trade(db, p: Principal, corr: str, trade_id: str, declared_master_i
             status, ns, master = "MEMBER", pkg.netting_set_id, pkg.master_id
             reason = (f"Trade declares master {pkg.master_id} and netting set {pkg.netting_set_id}; that netting set is governed by "
                       f"{pkg.csa_id} under {pkg.master_id} with approved close-out netting authorisation")
-    if ex is not None:
-        if (ex.status, ex.netting_set_id, ex.declared_master_id, ex.declared_netting_set_id) == (status, ns, declared_master_id, declared_ns):
-            return membership_out(ex)
+    def _same_or_conflict(row: ConNettingMembership) -> dict:
+        if (row.status, row.netting_set_id, row.declared_master_id, row.declared_netting_set_id) == (status, ns, declared_master_id, declared_ns):
+            return membership_out(row)
         raise Conflict("Trade already mapped differently; mapping changes require a reviewed amendment", code="MAPPING_CONFLICT")
+
+    if ex is not None:
+        return _same_or_conflict(ex)
     m = ConNettingMembership(tenant_id=p.tenant_id, trade_id=trade_id, declared_master_id=declared_master_id,
                              declared_netting_set_id=declared_ns, netting_set_id=ns, master_id=master, status=status,
                              reason=reason, recorded_by=p.user_id)
-    db.add(m)
-    db.flush()
+    try:
+        with db.begin_nested():  # a concurrent registration of the same trade (e.g. unknown netting set) must not 500
+            db.add(m)
+            db.flush()
+    except IntegrityError:
+        won = db.execute(select(ConNettingMembership).where(ConNettingMembership.tenant_id == p.tenant_id,
+                                                            ConNettingMembership.trade_id == trade_id)
+                         .execution_options(populate_existing=True)).scalar_one()
+        return _same_or_conflict(won)
     _ev(db, p, corr, "NETTING_MAPPING_RECORDED", "trade_mapping", trade_id, mode="MANUAL", rationale=reason,
+        parents=_parents(("contract_package", pkg.package_id)) if pkg is not None else None,
         payload={"trade_id": trade_id, "status": status, "netting_set_id": ns, "declared_master_id": declared_master_id,
                  "declared_netting_set_id": declared_ns})
     return membership_out(m)
@@ -612,8 +751,12 @@ def record_facts(db, p: Principal, corr: str, facts: dict, fact_snapshot_id: str
                                                 ConFactSnapshot.fact_snapshot_id == sid)).first():
         raise Conflict("fact snapshot id already exists (snapshots are immutable)", code="FACT_SNAPSHOT_EXISTS")
     h = content_hash(norm)
-    db.add(ConFactSnapshot(tenant_id=p.tenant_id, fact_snapshot_id=sid, facts=norm, facts_hash=h, created_by=p.user_id))
-    db.flush()
+    try:
+        with db.begin_nested():
+            db.add(ConFactSnapshot(tenant_id=p.tenant_id, fact_snapshot_id=sid, facts=norm, facts_hash=h, created_by=p.user_id))
+            db.flush()
+    except IntegrityError:
+        raise Conflict("fact snapshot id already exists (snapshots are immutable)", code="FACT_SNAPSHOT_EXISTS") from None
     _ev(db, p, corr, "FACT_SNAPSHOT_RECORDED", "fact_snapshot", sid, mode="MANUAL", output_hash=h,
         payload={"fact_keys": sorted(norm), "sources": sorted({f["source_id"] for f in norm.values()})})
     return {"fact_snapshot_id": sid, "facts_hash": h, "facts": norm}
@@ -745,3 +888,4 @@ def _svc_resolve_terms(session, tenant_id, netting_set_id, as_of, known_at=None,
 services.register("contracts.resolve_terms", _svc_resolve_terms)
 services.register("contracts.netting_membership", lambda session, tenant_id, trade_id, as_of=None: netting_membership(session, tenant_id, trade_id, as_of))
 services.register("contracts.terms_by_hash", lambda session, tenant_id, terms_hash: terms_by_hash(session, tenant_id, terms_hash))
+services.register("replay.contracts", replay_contracts)

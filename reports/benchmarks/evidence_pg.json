@@ -1,0 +1,158 @@
+{
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "python": "3.14.3",
+    "cpu_count": 8,
+    "db": "PostgreSQL 16.16 (Debian 16.16-1.pgdg13+1) on x86_64-pc-linux-gnu",
+    "db_location": "Docker container on the same host, loopback",
+    "network": "loopback only",
+    "commit": "not recorded (shared working tree, uncommitted at measurement time)",
+    "noise_note": "Shared developer machine; other workers were running test suites concurrently. Numbers are indicative, not a quiet-machine baseline.",
+    "measured_at": "2026-11-25T01:36:32Z"
+  },
+  "targets": {
+    "append_p95_ms": 100,
+    "verify_10k_s": 5
+  },
+  "append_single_writer": {
+    "n": 300,
+    "p50_ms": 37.562,
+    "p95_ms": 88.603,
+    "p99_ms": 115.948,
+    "mean_ms": 44.876,
+    "max_ms": 126.629,
+    "warmups": 20,
+    "met_target_p95_lt_100ms": true,
+    "note": "one evidence append per committed transaction, real network round trips to PostgreSQL"
+  },
+  "append_contended_4_threads": {
+    "n": 160,
+    "p50_ms": 93.484,
+    "p95_ms": 288.312,
+    "p99_ms": 624.969,
+    "mean_ms": 128.208,
+    "max_ms": 1017.922,
+    "failures": 0,
+    "throughput_per_s": 26.3,
+    "chain_valid": true,
+    "note": "same tenant: serialised by the chain-head row lock (by design)"
+  },
+  "append_contended_8_threads": {
+    "n": 320,
+    "p50_ms": 84.617,
+    "p95_ms": 1075.473,
+    "p99_ms": 1850.328,
+    "mean_ms": 202.449,
+    "max_ms": 3646.018,
+    "failures": 0,
+    "throughput_per_s": 35.0,
+    "chain_valid": true,
+    "note": "same tenant: serialised by the chain-head row lock (by design)"
+  },
+  "append_contended_4_processes": {
+    "n": 160,
+    "p50_ms": 120.255,
+    "p95_ms": 368.412,
+    "p99_ms": 521.704,
+    "mean_ms": 160.015,
+    "max_ms": 1011.508,
+    "failures": 0,
+    "errors": [],
+    "chain_valid": true,
+    "note": "4 OS processes x 40 appends each, same tenant, per-append latency measured inside the worker"
+  },
+  "verify_10k_chain_full": {
+    "reps": 5,
+    "seconds": [
+      2.228,
+      2.135,
+      2.258,
+      2.238,
+      2.515
+    ],
+    "p50_s": 2.238,
+    "max_s": 2.515,
+    "events_recomputed": 10000,
+    "python_heap_peak_mb_separate_traced_rep": 25.3,
+    "target_s": 5,
+    "met_target": true
+  },
+  "verify_10k_anchored_full": {
+    "reps": 3,
+    "seconds": [
+      1.733,
+      1.771,
+      1.896
+    ],
+    "p50_s": 1.771,
+    "max_s": 1.896,
+    "events_recomputed": 10100,
+    "python_heap_peak_mb_separate_traced_rep": 25.3
+  },
+  "verify_10k_anchored_incremental_100_new_events": {
+    "reps": 5,
+    "seconds": [
+      0.029,
+      0.023,
+      0.024,
+      0.028,
+      0.022
+    ],
+    "p50_s": 0.024,
+    "max_s": 0.029,
+    "events_recomputed": 100,
+    "python_heap_peak_mb_separate_traced_rep": 0.3
+  },
+  "build_100k_bulk_seconds": 27.8,
+  "verify_100k_chain_full": {
+    "reps": 3,
+    "seconds": [
+      13.88,
+      16.949,
+      17.04
+    ],
+    "p50_s": 16.949,
+    "max_s": 17.04,
+    "events_recomputed": 100000,
+    "python_heap_peak_mb_separate_traced_rep": 25.3
+  },
+  "checkpoint_100k_first_full_seconds": 14.87,
+  "verify_100k_anchored_full": {
+    "reps": 3,
+    "seconds": [
+      11.656,
+      20.864,
+      14.613
+    ],
+    "p50_s": 14.613,
+    "max_s": 20.864,
+    "events_recomputed": 100100,
+    "python_heap_peak_mb_separate_traced_rep": 25.3
+  },
+  "verify_100k_anchored_incremental_100_new_events": {
+    "reps": 5,
+    "seconds": [
+      0.025,
+      0.024,
+      0.023,
+      0.024,
+      0.026
+    ],
+    "p50_s": 0.024,
+    "max_s": 0.026,
+    "events_recomputed": 100,
+    "python_heap_peak_mb_separate_traced_rep": 0.3
+  },
+  "export_200_events_from_100k_chain": {
+    "reps": 3,
+    "seconds": [
+      1.702,
+      1.764,
+      1.632
+    ],
+    "p50_s": 1.702,
+    "bundle_events": 202,
+    "note": "includes incremental checkpoint, signing, skeleton of ALL chain rows up to the checkpoint, zip, vault store"
+  },
+  "process_peak_working_set_mb": 0.0
+}

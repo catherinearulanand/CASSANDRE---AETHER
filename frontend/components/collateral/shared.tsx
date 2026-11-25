@@ -19,7 +19,9 @@ export function useLoad<T>(fn: (signal: AbortSignal) => Promise<T>, deps: unknow
     return () => ac.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [...deps, tick, enabled]);
-  return { data, error, loading, reload };
+  // Derive "loading" synchronously: on the first render after `enabled`/deps change the effect has not run yet, so state still says
+  // loading=false with data=null. Without this, consumers rendered with null data (crash found by the browser flow test).
+  return { data, error, loading: loading || (enabled && data === null && error === null), reload };
 }
 
 export function stateTone(state: string): "ok" | "warn" | "danger" | "info" | "neutral" {
@@ -57,11 +59,25 @@ export function ConfirmDialog({ title, open, onClose, onConfirm, pending, confir
 }) {
   const [reason, setReason] = useState("");
   const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (open) { setReason(""); ref.current?.focus(); } }, [open]);
+  const opener = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (open) { opener.current = document.activeElement as HTMLElement | null; setReason(""); ref.current?.focus(); }
+    else if (opener.current) { opener.current.focus?.(); opener.current = null; } // return focus to the control that opened the dialog
+  }, [open]);
   if (!open) return null;
+  // Focus trap: Tab / Shift+Tab cycle inside the modal; Escape closes (unless a request is pending).
+  const trap = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape" && !pending) { onClose(); return; }
+    if (e.key !== "Tab" || !ref.current) return;
+    const f = Array.from(ref.current.querySelectorAll<HTMLElement>("button:not([disabled]), textarea, input, select, a[href], [tabindex]:not([tabindex='-1'])"));
+    if (f.length === 0) { e.preventDefault(); return; }
+    const first = f[0], last = f[f.length - 1], cur = document.activeElement;
+    if (e.shiftKey && (cur === first || cur === ref.current)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+  };
   return (
     <div role="dialog" aria-modal="true" aria-label={title} ref={ref} tabIndex={-1}
-      onKeyDown={e => { if (e.key === "Escape" && !pending) onClose(); }}
+      onKeyDown={trap}
       style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", display: "grid", placeItems: "center", zIndex: 50, padding: 16 }}>
       <div className="card" style={{ maxWidth: 640, width: "100%", maxHeight: "90vh", overflow: "auto" }}>
         <h2>{title}</h2>

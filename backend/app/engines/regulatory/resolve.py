@@ -58,11 +58,9 @@ def _entry(r: RegRule, hypothetical: bool, trace) -> dict:
             "conflict_group": r.conflict_group, "precedence_rank": r.precedence_rank, "hypothetical": hypothetical, "trace": trace}
 
 
-def resolve_rules(db, tenant_id: str, context: dict, as_of: datetime, known_at: datetime | None = None,
-                  hypothetical_rule_ids: list[str] | None = None) -> dict:
-    as_of, known_at = _aware(as_of, "as_of"), _aware(known_at, "known_at")
-    ctx = dict(context)
-    ctx.setdefault("as_of_date", as_of.date().isoformat())
+def _prepare(db, tenant_id: str, as_of: datetime, known_at: datetime | None, hypothetical_rule_ids: list[str] | None):
+    """Everything that does NOT depend on the account context: the in-force rules (+ counterfactual overlay), their static
+    entry parts and their additive-stricter flags. Done ONCE per resolve_rules call and once per batch."""
     chosen = in_force(db, tenant_id, as_of, known_at)
     hyp_ids = set()
     for hid in hypothetical_rule_ids or []:
@@ -74,21 +72,30 @@ def resolve_rules(db, tenant_id: str, context: dict, as_of: datetime, known_at: 
                                    field_errors={"hypothetical_rule_ids": "non-compiling rule"})
         chosen[r.rule_key] = r  # counterfactual overlay replaces the in-force version of the same key
         hyp_ids.add(r.rule_id)
-    applicable, excluded, unknown = [], [], []
+    static = {}
     for key in sorted(chosen):
         r = chosen[key]
-        hyp = r.rule_id in hyp_ids
+        static[key] = (r, r.rule_id in hyp_ids, _entry(r, r.rule_id in hyp_ids, None), bool(r.additive_stricter),
+                       sorted(dsl.node_dependencies(r.scope, r.parameters)))
+    return {"hyp": bool(hyp_ids), "static": static, "pinned": set()}
+
+
+def _resolve_one(db, tenant_id: str, prep: dict, context: dict, as_of: datetime, known_at: datetime | None) -> dict:
+    ctx = dict(context)
+    ctx.setdefault("as_of_date", as_of.date().isoformat())
+    applicable, excluded, unknown = [], [], []
+    for key, (r, hyp, base, _add, deps) in prep["static"].items():
         s, trace = dsl.evaluate(r.scope, ctx, r.parameters)
         if r.effective_from > as_of:  # hypothetical future revision evaluated at as_of: carry the date explicitly
             trace.append({"depth": 0, "op": "NOTE", "result": "TRUE", "detail": f"hypothetical effective_from {r.effective_from.isoformat()} is after as_of; applied as counterfactual"})
-        e = _entry(r, hyp, trace)
+        e = dict(base) | {"trace": trace}
         if s == "TRUE":
             applicable.append(e)
         elif s == "FALSE":
             excluded.append(e | {"reason": "SCOPE_NOT_MATCHED"})
         else:
-            unknown.append(e | {"reason": "SCOPE_UNKNOWN_MISSING_CONTEXT",
-                                "missing_context": sorted(f for f in dsl.node_dependencies(r.scope, r.parameters) if ctx.get(f) is None)})
+            unknown.append(e | {"reason": "SCOPE_UNKNOWN_MISSING_CONTEXT", "missing_context": [f for f in deps if ctx.get(f) is None]})
+    additive = {base["rule_id"]: add for (_r, _h, base, add, _d) in prep["static"].values()}
     conflicts, final = [], []
     groups: dict[str, list[dict]] = {}
     for e in applicable:
@@ -102,7 +109,7 @@ def resolve_rules(db, tenant_id: str, context: dict, as_of: datetime, known_at: 
         for e in es:
             if e not in lead:
                 excluded.append(e | {"reason": "LOWER_PRECEDENCE_BY_APPROVED_RANK", "winner_rank": top})
-        stricter_ok = all(_additive(db, e) for e in lead)
+        stricter_ok = all(additive.get(e["rule_id"], False) for e in lead)
         if len(lead) > 1 and not stricter_ok and _incompatible(lead):
             conflicts.append({"conflict_group": g, "rule_keys": [e["rule_key"] for e in lead],
                               "reason": "INCOMPATIBLE_MANDATES_EQUAL_RANK: human review/approved hierarchy required", "rules": lead})
@@ -110,16 +117,36 @@ def resolve_rules(db, tenant_id: str, context: dict, as_of: datetime, known_at: 
             final += lead
     members = sorted(({"rule_key": e["rule_key"], "version": e["version"], "rule_hash": e["rule_hash"], "hypothetical": e["hypothetical"],
                        "parameters": e["parameters"]} for e in final), key=lambda m: (m["rule_key"], m["version"]))
-    is_hyp = bool(hyp_ids)
+    is_hyp = prep["hyp"]
     rsh = domain_hash("aether.reg.ruleset.v1", [{k: m[k] for k in ("rule_key", "version", "rule_hash", "hypothetical")} for m in members])
-    if db.get(RegRuleSet, (rsh, tenant_id)) is None:  # idempotent pin of the exact set (read-only semantics for callers)
-        db.add(RegRuleSet(rule_set_hash=rsh, tenant_id=tenant_id, members=members, hypothetical=is_hyp))
-        db.flush()
+    if rsh not in prep["pinned"]:
+        if db.get(RegRuleSet, (rsh, tenant_id)) is None:  # idempotent pin of the exact set (read-only semantics for callers)
+            db.add(RegRuleSet(rule_set_hash=rsh, tenant_id=tenant_id, members=members, hypothetical=is_hyp))
+            db.flush()
+        prep["pinned"].add(rsh)
     return {"applicable": final, "excluded": excluded, "unknown": unknown, "conflicts": conflicts, "rule_set_hash": rsh,
             "hypothetical": is_hyp, "official": not is_hyp, "as_of": as_of.isoformat(), "known_at": known_at.isoformat() if known_at else None,
             "trace": [{"rule_key": e["rule_key"], "version": e["version"], "outcome": o} for o, es in
                       (("APPLICABLE", final), ("EXCLUDED", excluded), ("UNKNOWN", unknown)) for e in es]
                      + [{"conflict_group": c["conflict_group"], "outcome": "CONFLICT"} for c in conflicts]}
+
+
+def resolve_rules(db, tenant_id: str, context: dict, as_of: datetime, known_at: datetime | None = None,
+                  hypothetical_rule_ids: list[str] | None = None) -> dict:
+    as_of, known_at = _aware(as_of, "as_of"), _aware(known_at, "known_at")
+    prep = _prepare(db, tenant_id, as_of, known_at, hypothetical_rule_ids)
+    return _resolve_one(db, tenant_id, prep, context, as_of, known_at)
+
+
+def resolve_rules_batch(db, tenant_id: str, contexts: list[dict], as_of: datetime, known_at: datetime | None = None,
+                        hypothetical_rule_ids: list[str] | None = None) -> list[dict]:
+    """Additive service: the same result as resolve_rules() for every context, with the in-force rule set loaded and prepared ONCE.
+    Output order == input order. Bounded (<= 10,000 contexts) so a request cannot monopolise a worker."""
+    if len(contexts) > 10_000:
+        raise ValidationFailed("at most 10,000 contexts per batch", field_errors={"contexts": "too many"})
+    as_of, known_at = _aware(as_of, "as_of"), _aware(known_at, "known_at")
+    prep = _prepare(db, tenant_id, as_of, known_at, hypothetical_rule_ids)
+    return [_resolve_one(db, tenant_id, prep, c, as_of, known_at) for c in contexts]
 
 
 def _additive(db, e: dict) -> bool:

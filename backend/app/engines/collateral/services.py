@@ -9,9 +9,11 @@ from __future__ import annotations
 import csv
 import io
 from datetime import date, datetime, timedelta
+from importlib import metadata as _md
 from decimal import Decimal
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.security import Principal, require_distinct_checker
 from app.core import services
@@ -29,7 +31,15 @@ from app.engines.collateral.eligibility import RATING_ORDER, assess_lot, availab
 from app.engines.collateral.models import (ColConstraint, ColInstructionDraft, ColLeg, ColLot, ColProposal,
                                            ColReservation, ColSnapshot)
 
-SERVICE_VERSION = "aether-collateral/1.0"
+SERVICE_VERSION = "aether-collateral/1.1"
+try:
+    _HIGHS = _md.version("highspy")
+except _md.PackageNotFoundError:  # pragma: no cover
+    _HIGHS = "unknown"
+# Method version pins the solver library: a replay on a different HiGHS is NOT_REPLAYABLE (never silently re-run).
+METHOD_VERSION = f"collateral-lp/1 highspy/{_HIGHS}"
+LP_TOLERANCE = "0.000001"  # declared numerical tolerance for LP objective/coverage when legs differ at platform noise level
+PROPOSAL_TYPE, SNAPSHOT_TYPE = "allocation_proposal", "inventory_snapshot"  # lineage stages PROPOSAL / SNAPSHOT (VERITAS)
 WATERMARK = "SYNTHETIC DRAFT - NOT TRANSMITTED - NO ASSET MOVEMENT"
 OPEN_STATES = ("PROPOSED", "CHECKED", "APPROVED", "RESERVED")
 MARKETS = ("OTC", "ETD_DOMESTIC", "ETD_IFSC")
@@ -194,7 +204,15 @@ def import_inventory(session, tenant_id: str, *, actor_id: str, role: str | None
     snap = ColSnapshot(tenant_id=tenant_id, snapshot_id=sid, as_of=as_of, currency=ccy, market_type=market,
                        content_hash=h, policy=policy, wrong_way_issuer_groups=sorted(wrong), lot_count=len(lots),
                        source_ref=payload.get("source_ref"), created_by=actor_id)
-    session.add(snap)
+    try:
+        with session.begin_nested():  # concurrent first import of the same snapshot_id: loser re-reads instead of a 500
+            session.add(snap)
+            session.flush()
+    except IntegrityError:
+        existing = session.get(ColSnapshot, (tenant_id, sid), populate_existing=True)
+        if existing is not None and existing.content_hash == h:
+            return {**snapshot_out(existing), "replayed": True}
+        raise Conflict(f"snapshot {sid} was created concurrently with different content", code="SNAPSHOT_CONTENT_MISMATCH") from None
     for l in lots:
         session.add(ColLot(
             tenant_id=tenant_id, snapshot_id=sid, lot_id=l["lot_id"], owner_entity=l["owner_entity"],
@@ -208,7 +226,7 @@ def import_inventory(session, tenant_id: str, *, actor_id: str, role: str | None
             entitled_to=l["entitled_to"], posted_account_id=l.get("posted_account_id"),
             posted_u=V.to_u(l["posted_units"])))
     session.flush()
-    _evidence(session, tenant_id, "COLLATERAL_INVENTORY_IMPORTED", actor_id=actor_id, role=role, entity_type="col_snapshot",
+    _evidence(session, tenant_id, "COLLATERAL_INVENTORY_IMPORTED", actor_id=actor_id, role=role, entity_type=SNAPSHOT_TYPE,
               entity_id=sid, revision=1, correlation_id=correlation_id, effective_at=as_of, output_hash=h,
               payload={"lots": len(lots), "currency": ccy, "market_type": market}, input_hashes=[h])
     return {**snapshot_out(snap), "replayed": False}
@@ -241,6 +259,29 @@ def _tz(dt: datetime | str) -> datetime:
     return dt
 
 
+# COVENANT (contracts) and ATLAS (inventory) name asset classes / cap denominators differently. Until CONTRACTS.md freezes one
+# vocabulary, ATLAS maps ONLY these exact aliases (same economic meaning) and RECORDS each mapping as a visible warning.
+# Anything else is left untouched and is rejected/excluded by validation (no silent coercion).
+ASSET_CLASS_ALIASES = {"GOVERNMENT_BOND": "GSEC", "CORPORATE_BOND": "CORP"}
+CAP_DENOM_ALIASES = {"TOTAL_EFFECTIVE_ALLOCATED": "TOTAL_ALLOCATED"}  # both: fraction of TOTAL effective allocated coverage
+
+
+def _normalise_contract_schedule(schedule: list[dict]) -> tuple[list[dict], list[str]]:
+    out, notes = [], []
+    for e in schedule:
+        e = dict(e)
+        ac = e.get("asset_class")
+        if ac in ASSET_CLASS_ALIASES:
+            notes.append(f"VOCABULARY_NORMALISED: contract asset_class {ac} -> inventory class {ASSET_CLASS_ALIASES[ac]}")
+            e["asset_class"] = ASSET_CLASS_ALIASES[ac]
+        cd = e.get("cap_denominator")
+        if cd in CAP_DENOM_ALIASES:
+            notes.append(f"VOCABULARY_NORMALISED: contract cap_denominator {cd} -> {CAP_DENOM_ALIASES[cd]}")
+            e["cap_denominator"] = CAP_DENOM_ALIASES[cd]
+        out.append(e)
+    return out, sorted(set(notes))
+
+
 def _terms_source(session, tenant_id: str, ns_id: str, as_of: datetime, terms_hash: str | None) -> tuple[dict, str]:
     t = services.call("contracts.resolve_terms", session, tenant_id, ns_id, as_of, None)
     if t.get("status") != "RESOLVED" or not t.get("terms_hash"):
@@ -248,7 +289,8 @@ def _terms_source(session, tenant_id: str, ns_id: str, as_of: datetime, terms_ha
                       code="TERMS_BLOCKED")
     if terms_hash and t["terms_hash"] != terms_hash:
         raise Blocked("Approved terms changed since the margin result was computed (stale terms hash)", code="STALE_TERMS")
-    src = {"source": "CONTRACT", "schedule": (t.get("terms") or {}).get("eligible_schedule") or []}
+    schedule, notes = _normalise_contract_schedule((t.get("terms") or {}).get("eligible_schedule") or [])
+    src = {"source": "CONTRACT", "schedule": schedule, "vocab_notes": notes}
     if not src["schedule"]:
         raise Blocked("Contract terms contain no eligibility schedule", code="NO_ELIGIBILITY_SCHEDULE")
     return src, t["terms_hash"]
@@ -297,6 +339,17 @@ def posted_coverage(session, tenant_id: str, account_id: str, as_of: datetime) -
     raise Unavailable("No posted-collateral records for this account at the given as_of", code="NO_POSTED_COLLATERAL_DATA")
 
 
+def _money_amount(v, field: str, expected_ccy: str | None) -> Decimal:
+    """Upstream amounts arrive either as a bare decimal string or as a Money object {"amount","currency"} (VECTOR's shape).
+    Currency, when present, must equal the result's currency: no implicit blending."""
+    if isinstance(v, dict):
+        ccy = v.get("currency")
+        if ccy and expected_ccy and ccy != expected_ccy:
+            raise NumericError(f"{field}: currency {ccy} differs from result currency {expected_ccy}")
+        v = v.get("amount")
+    return V.D(v, field)
+
+
 def _context(session, tenant_id: str, margin_result_id: str, snapshot_id: str, rule_set_hash: str | None,
              terms_hash: str | None, deadline, horizon_days: int) -> dict:
     if not isinstance(horizon_days, int) or horizon_days <= 0:
@@ -333,6 +386,7 @@ def _context(session, tenant_id: str, margin_result_id: str, snapshot_id: str, r
     used_terms = None
     if market == "OTC":
         src, used_terms = _terms_source(session, tenant_id, obligation, snap.as_of, terms_hash or m.get("terms_hash"))
+        warnings.extend(src.pop("vocab_notes", []))
         sources.append(src)
     if (snap.policy or {}).get("schedule"):
         sources.append({"source": "CLEARING_POLICY", **snap.policy})
@@ -349,13 +403,17 @@ def _context(session, tenant_id: str, margin_result_id: str, snapshot_id: str, r
             raise Blocked("Invalid eligibility schedule: " + "; ".join(bad[:3]), code="INVALID_ELIGIBILITY_SCHEDULE")
     # required effective coverage still to be posted
     posted = None
-    if market == "OTC":
-        amt = Decimal(0)
-        if m.get("direction") == "POST":
-            amt = V.D((m.get("rounded_amount") or (m.get("required_amount") or {}).get("amount") or "0"), "required")
-        need = amt
-    else:
-        total = V.D((m.get("required_amount") or {}).get("amount", "0"), "required_amount")
+    try:
+        if market == "OTC":
+            amt = Decimal(0)
+            if m.get("direction") == "POST":
+                amt = _money_amount(m.get("rounded_amount") or m.get("required_amount") or "0", "rounded_amount", m.get("currency"))
+            need = amt
+        else:
+            total = _money_amount(m.get("required_amount") or "0", "required_amount", m.get("currency"))
+    except NumericError as exc:  # never a 500: an unparseable upstream amount blocks with a reason
+        raise Blocked(f"Margin result amount is not usable: {exc}", code="MARGIN_BLOCKED") from exc
+    if market != "OTC":
         try:
             posted = posted_coverage(session, tenant_id, obligation, snap.as_of)
             have = Decimal(posted["eligible_posted"]["amount"])
@@ -384,18 +442,28 @@ def _raw_lot(l: ColLot, extra_avail_u: int = 0) -> dict:
             "lot_size": dstr(V.from_u(l.lot_size_u))}
 
 
-def _evaluate(ctx: dict, rows: list[ColLot], need: Decimal, stress: dict | None = None, time_limit: float = 10.0) -> dict:
+def _avail_u(l: ColLot) -> int:
+    return max(0, l.units_u - l.encumbered_u - l.reserved_u)
+
+
+def _evaluate(ctx: dict, rows: list[ColLot], need: Decimal, stress: dict | None = None, time_limit: float = 10.0,
+              availability: dict | None = None) -> dict:
+    """`availability` ({lot_id: decimal-string}) pins the availability the optimisation saw, so a REPLAY after later
+    reservations/settlements recomputes from the same persisted inputs instead of the current inventory."""
     rows = _candidates(rows)
+    extra = {l.lot_id: (V.to_u(Decimal(availability[l.lot_id])) - _avail_u(l)) if availability and l.lot_id in availability else 0
+             for l in rows}
     assessed = [assess_lot(l, obligation_id=ctx["obligation"], target_ccy=ctx["currency"], sources=ctx["sources"],
                            wrong_way_groups=ctx["snap"].wrong_way_issuer_groups, as_of=ctx["as_of"], deadline=ctx["deadline"],
-                           horizon_days=ctx["horizon_days"], stress=stress) for l in rows]
+                           horizon_days=ctx["horizon_days"], stress=stress, extra_available=extra[l.lot_id]) for l in rows]
     el = [a for a in assessed if a.eligible]
     exclusions = [{"lot_id": a.lot_id, "reasons": sorted(set(a.reasons))} for a in assessed if not a.eligible]
     params = {"sources": ctx["sources"], "wrong_way_issuer_groups": ctx["snap"].wrong_way_issuer_groups,
               "obligation_id": ctx["obligation"], "currency": ctx["currency"], "as_of": ctx["as_of"].isoformat(),
               "deadline": ctx["deadline"].isoformat(), "required": dstr(need), "overpost_allowance": "0",
-              "stress": stress or None, "horizon_days": ctx["horizon_days"]}
-    raw = {l.lot_id: _raw_lot(l) for l in rows}
+              "stress": stress or None, "horizon_days": ctx["horizon_days"],
+              "availability": {l.lot_id: dstr(V.from_u(max(0, _avail_u(l) + extra[l.lot_id]))) for l in rows}}
+    raw = {l.lot_id: _raw_lot(l, extra[l.lot_id]) for l in rows}
     groups, meta = E.build_groups(el, ctx["sources"])
     res = E.solve_pipeline(el, need, groups, meta, raw, params, time_limit=time_limit)
     params["overpost_allowance"] = res.get("params_overpost_allowance", "0")
@@ -410,16 +478,21 @@ def _proposal_hash(p: dict) -> str:
     return content_hash(p)
 
 
+def _business_hash(ctx: dict, need: Decimal, kind: str, stress: dict | None, legs: list[dict]) -> str:
+    """Canonical business hash of a proposal: inputs' hashes + required coverage + horizon + deadline + stress + rounded legs.
+    Excludes proposal ids, timestamps, audit sequence. Used for proposal_hash AND for replay comparison."""
+    return _proposal_hash({"margin_result_hash": ctx["margin"].get("result_hash"), "inventory_hash": ctx["snap"].content_hash,
+                           "terms_hash": ctx["terms_hash"], "rule_set_hash": ctx["rule_set_hash"], "required": need,
+                           "horizon_days": ctx["horizon_days"], "deadline": ctx["deadline"], "kind": kind, "stress": stress,
+                           "legs": [{k: l[k] for k in ("lot_id", "quantity", "effective_coverage", "cost_horizon")} for l in legs]})
+
+
 def _persist(session, tenant_id: str, ctx: dict, ev: dict, *, kind: str, state: str, actor_id: str, correlation_id: str,
              need: Decimal, hypothetical: bool, now: datetime) -> ColProposal:
     res = ev["res"]
     pid = new_id()
     legs = res.get("legs", [])
-    h = _proposal_hash({"margin_result_hash": ctx["margin"].get("result_hash"), "inventory_hash": ctx["snap"].content_hash,
-                        "terms_hash": ctx["terms_hash"], "rule_set_hash": ctx["rule_set_hash"], "required": need,
-                        "horizon_days": ctx["horizon_days"], "deadline": ctx["deadline"], "kind": kind,
-                        "stress": ev["params"].get("stress"),
-                        "legs": [{k: l[k] for k in ("lot_id", "quantity", "effective_coverage", "cost_horizon")} for l in legs]})
+    h = _business_hash(ctx, need, kind, ev["params"].get("stress"), legs)
     stored = {k: v for k, v in res.items() if k not in ("assessed", "legs", "constraints", "baseline")}
     p = ColProposal(
         proposal_id=pid, tenant_id=tenant_id, kind=kind, state=state, solver_status=res["solver_status"],
@@ -440,6 +513,31 @@ def _persist(session, tenant_id: str, ctx: dict, ev: dict, *, kind: str, state: 
                                   measured_value=c["measured"], slack=c["slack"], binding=c["binding"], unit=c["unit"]))
     session.flush()
     return p
+
+
+def _parents(ctx: dict, inventory_snapshot_id: str) -> list[dict]:
+    """Lineage edges in VERITAS' format {entity_type, entity_id}: margin result, inventory snapshot, rule set, terms."""
+    out = [{"entity_type": "margin_result", "entity_id": ctx["margin"]["result_id"]},
+           {"entity_type": SNAPSHOT_TYPE, "entity_id": inventory_snapshot_id}]
+    if ctx.get("rule_set_hash"):
+        out.append({"entity_type": "rule_set", "entity_id": ctx["rule_set_hash"]})
+    if ctx.get("terms_hash"):
+        out.append({"entity_type": "terms", "entity_id": ctx["terms_hash"]})
+    return out
+
+
+def _replay_spec(p: ColProposal, ctx: dict) -> dict:
+    """payload.replay (CONTRACTS v1.1). business_hash == proposal_hash: it covers margin/inventory/terms/rule hashes, the
+    required coverage, horizon, deadline, stress and the rounded legs - and excludes ids, timestamps and audit sequence."""
+    return {"replayer": "replay.collateral", "engine_version": SERVICE_VERSION, "method_version": METHOD_VERSION,
+            "business_hash": p.proposal_hash,
+            "inputs": {"proposal_id": p.proposal_id, "kind": p.kind, "margin_result_id": p.margin_result_id,
+                       "inventory_snapshot_id": p.inventory_snapshot_id, "rule_set_hash": p.rule_set_hash,
+                       "terms_hash": p.terms_hash, "deadline": p.deadline.isoformat(), "horizon_days": p.horizon_days,
+                       "required": p.required_coverage, "stress": (p.params or {}).get("stress"),
+                       "availability": (p.params or {}).get("availability")},
+            "values": {"objective": p.objective or "0", "residual": p.residual or "0"},
+            "tolerance": LP_TOLERANCE}
 
 
 def optimise(session, tenant_id: str, margin_result_id: str, inventory_snapshot_id: str, rule_set_hash: str | None,
@@ -465,13 +563,13 @@ def optimise(session, tenant_id: str, margin_result_id: str, inventory_snapshot_
         p = _persist(session, tenant_id, ctx, ev, kind="PROPOSAL", state=state, actor_id=actor_id, correlation_id=cid,
                      need=need, hypothetical=ctx["hypothetical"], now=now)
     _evidence(session, tenant_id, "COLLATERAL_PROPOSAL_CREATED", actor_id=actor_id, actor_type=actor_type, role=actor_role,
-              entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision, correlation_id=cid,
+              entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision, correlation_id=cid,
               effective_at=ctx["as_of"], input_hashes=hashes, output_hash=p.proposal_hash,
               payload={"state": p.state, "solver_status": p.solver_status, "required_coverage": p.required_coverage,
                        "objective": p.objective, "legs": [l["lot_id"] for l in ev["res"].get("legs", [])],
                        "market": ctx["market"], "obligation_id": ctx["obligation"],
-                       "parents": [{"type": "margin_result", "id": ctx["margin"]["result_id"]},
-                                   {"type": "col_snapshot", "id": inventory_snapshot_id}]})
+                       "parents": _parents(ctx, inventory_snapshot_id),
+                       "replay": _replay_spec(p, ctx)})
     emit(session, event_type="AllocationProposed", tenant_id=tenant_id, correlation_id=cid, aggregate_id=p.proposal_id,
          actor_id=actor_id, actor_type=actor_type, aggregate_revision=p.revision, effective_at=ctx["as_of"],
          payload={"proposal_hash": p.proposal_hash, "state": p.state, "solver_status": p.solver_status})
@@ -504,12 +602,13 @@ def _verify_and_check(session, p: ColProposal, *, actor_id, actor_type="USER", r
     if ver["ok"] and p.state == "PROPOSED":
         p.state, p.revision, p.updated_at = "CHECKED", p.revision + 1, now
         _evidence(session, p.tenant_id, "COLLATERAL_PROPOSAL_CHECKED", actor_id=actor_id, actor_type=actor_type, role=role,
-                  entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
-                  payload={"verifier_ok": True, "checks": len(ver["checks"]), "coverage": ver["coverage"]},
+                  entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
+                  payload={"verifier_ok": True, "checks": len(ver["checks"]), "coverage": ver["coverage"],
+                           "parents": [{"entity_type": PROPOSAL_TYPE, "entity_id": p.proposal_id}]},
                   output_hash=p.proposal_hash)
     elif not ver["ok"]:
         _evidence(session, p.tenant_id, "COLLATERAL_VERIFICATION_FAILED", actor_id=actor_id, actor_type=actor_type, role=role,
-                  entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
+                  entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
                   payload={"failures": [f["name"] for f in ver["failures"]][:20]})
     session.flush()
     return p
@@ -524,8 +623,14 @@ def _release(session, p: ColProposal, now: datetime) -> None:
         r.status, r.released_at = "RELEASED", now
 
 
-def _get(session, tenant_id: str, proposal_id: str) -> ColProposal:
-    p = session.get(ColProposal, proposal_id)
+def _get(session, tenant_id: str, proposal_id: str, lock: bool = False) -> ColProposal:
+    """lock=True: row lock + refresh BEFORE any revision/state check (lost-update safe on PostgreSQL; found by the PG run)."""
+    if lock:
+        q = lock_for_update(select(ColProposal).where(ColProposal.proposal_id == proposal_id, ColProposal.tenant_id == tenant_id)) \
+            .execution_options(populate_existing=True)
+        p = session.execute(q).scalar_one_or_none()
+    else:
+        p = session.get(ColProposal, proposal_id)
     if p is None or p.tenant_id != tenant_id:
         raise NotFound("Proposal not found")  # identical for absent and other-tenant
     return p
@@ -533,10 +638,13 @@ def _get(session, tenant_id: str, proposal_id: str) -> ColProposal:
 
 def _maybe_expire(session, p: ColProposal, now: datetime, actor_id: str = "system") -> ColProposal:
     if p.state in OPEN_STATES and now > p.expires_at:
+        p = _get(session, p.tenant_id, p.proposal_id, lock=True)  # re-read under lock: another request may have settled it
+        if not (p.state in OPEN_STATES and now > p.expires_at):
+            return p
         _release(session, p, now)
         p.state, p.revision, p.updated_at = "EXPIRED", p.revision + 1, now
         _evidence(session, p.tenant_id, "COLLATERAL_PROPOSAL_EXPIRED", actor_id=actor_id, actor_type="SYSTEM",
-                  entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision,
+                  entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision,
                   correlation_id=p.correlation_id, payload={"expired_at": p.expires_at.isoformat()})
         session.flush()
     return p
@@ -588,7 +696,7 @@ def proposal_out(session, p: ColProposal, brief: bool = False) -> dict:
 def verify(session, tenant_id: str, proposal_id: str, *, actor_id: str = "system", actor_type: str = "SERVICE",
            actor_role: str | None = None, now: datetime | None = None) -> dict:
     now = now or utcnow()
-    p = _maybe_expire(session, _get(session, tenant_id, proposal_id), now)
+    p = _maybe_expire(session, _get(session, tenant_id, proposal_id, lock=True), now)
     if p.state in ("INFEASIBLE", "NOT_REQUIRED", "FAILED"):
         return {"proposal_id": p.proposal_id, "ok": False, "state": p.state, "failures": [{"name": f"state {p.state}: nothing to verify"}]}
     state_before = p.state
@@ -614,7 +722,7 @@ def approve_proposal(session, tenant_id: str, principal: Principal, proposal_id:
     now = now or utcnow()
     if not reason or not reason.strip():
         raise ValidationFailed("A reason is mandatory", field_errors={"reason": "required"})
-    p = _maybe_expire(session, _get(session, tenant_id, proposal_id), now)
+    p = _maybe_expire(session, _get(session, tenant_id, proposal_id, lock=True), now)
     _check_rev(p, expected_revision)
     if p.kind != "PROPOSAL" or p.hypothetical:
         raise Forbidden("Stress runs and proposals derived from a HYPOTHETICAL margin result can never be approved or reserved",
@@ -635,20 +743,37 @@ def approve_proposal(session, tenant_id: str, principal: Principal, proposal_id:
     session.flush()
     p.approval_id = ap.approval_id
     _evidence(session, tenant_id, "COLLATERAL_PROPOSAL_APPROVED", actor_id=principal.user_id, role=",".join(principal.roles),
-              entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
+              entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
               rationale=reason.strip(), input_hashes=[p.proposal_hash], output_hash=p.proposal_hash,
               payload={"approval_id": ap.approval_id, "maker": p.created_by, "checker": principal.user_id,
                        "target_hash": p.proposal_hash, "expires_at": ap.expires_at.isoformat()})
+    _evidence(session, tenant_id, "COLLATERAL_APPROVAL_RECORDED", actor_id=principal.user_id, role=",".join(principal.roles),
+              entity_type="approval", entity_id=ap.approval_id, revision=1, correlation_id=p.correlation_id,
+              rationale=reason.strip(), input_hashes=[p.proposal_hash], output_hash=p.proposal_hash,
+              payload={"decision": "APPROVED", "target_type": PROPOSAL_TYPE, "target_id": p.proposal_id,
+                       "target_hash": p.proposal_hash, "maker": p.created_by, "checker": principal.user_id,
+                       "parents": [{"entity_type": PROPOSAL_TYPE, "entity_id": p.proposal_id}]})
     session.flush()
     return {**proposal_out(session, p), "approval": {"approval_id": ap.approval_id, "decision": ap.decision,
                                                      "target_hash": ap.target_hash, "expires_at": ap.expires_at.isoformat()}}
+
+
+def _reserve_lot_units(session, tenant_id: str, lot_pk: str, q: int) -> bool:
+    """THE double-pledge guard: a single conditional UPDATE. The availability predicate is evaluated inside the statement
+    (re-evaluated against the committed row after a lock wait on PostgreSQL), so two reservations can never both win the
+    same units. Returns False (rowcount 0) when fewer than q units are free."""
+    res = session.execute(update(ColLot).where(ColLot.id == lot_pk, ColLot.tenant_id == tenant_id,
+                                              ColLot.units_u - ColLot.encumbered_u - ColLot.reserved_u >= q)
+                          .values(reserved_u=ColLot.reserved_u + q, version=ColLot.version + 1)
+                          .execution_options(synchronize_session=False))
+    return res.rowcount == 1
 
 
 def reserve(session, tenant_id: str, proposal_id: str, approval_id: str, *, actor_id: str = "system",
             actor_type: str = "SERVICE", actor_role: str | None = None, expected_revision: int | None = None,
             now: datetime | None = None) -> dict:
     now = now or utcnow()
-    p = _maybe_expire(session, _get(session, tenant_id, proposal_id), now)
+    p = _maybe_expire(session, _get(session, tenant_id, proposal_id, lock=True), now)
     if p.state == "RESERVED" and p.approval_id == approval_id:
         return proposal_out(session, p)  # idempotent retry
     _check_rev(p, expected_revision)
@@ -680,22 +805,21 @@ def reserve(session, tenant_id: str, proposal_id: str, approval_id: str, *, acto
                        code="STALE_INVENTORY")
     # ---- atomic reservation: lock, then conditional UPDATE (availability re-checked inside the statement)
     lots = {l.lot_id: l for l in _lots(session, tenant_id, p.inventory_snapshot_id)}
-    for leg in _legs(session, p):
-        lot = lots[leg.lot_id]
-        session.execute(lock_for_update(select(ColLot).where(ColLot.id == lot.id)))
-        q = V.to_u(Decimal(leg.quantity))
-        res = session.execute(update(ColLot).where(ColLot.id == lot.id, ColLot.tenant_id == tenant_id,
-                                                  ColLot.units_u - ColLot.encumbered_u - ColLot.reserved_u >= q)
-                              .values(reserved_u=ColLot.reserved_u + q, version=ColLot.version + 1)
-                              .execution_options(synchronize_session=False))
-        if res.rowcount != 1:
-            raise Conflict(f"Lot {leg.lot_id} no longer has {leg.quantity} available (concurrent reservation); nothing reserved",
-                           code="RESERVATION_CONFLICT")
-        session.add(ColReservation(tenant_id=tenant_id, proposal_id=p.proposal_id, lot_pk=lot.id, lot_id=leg.lot_id, quantity_u=q))
+    # Savepoint: if ANY leg fails, every earlier leg's UPDATE is rolled back (all-or-nothing) even if the caller keeps the session.
+    # Legs are processed in lot_id order => consistent lock order across concurrent proposals (no deadlock cycles).
+    with session.begin_nested():
+        for leg in _legs(session, p):
+            lot = lots[leg.lot_id]
+            session.execute(lock_for_update(select(ColLot).where(ColLot.id == lot.id)))
+            q = V.to_u(Decimal(leg.quantity))
+            if not _reserve_lot_units(session, tenant_id, lot.id, q):
+                raise Conflict(f"Lot {leg.lot_id} no longer has {leg.quantity} available (concurrent reservation); nothing reserved",
+                               code="RESERVATION_CONFLICT")
+            session.add(ColReservation(tenant_id=tenant_id, proposal_id=p.proposal_id, lot_pk=lot.id, lot_id=leg.lot_id, quantity_u=q))
     p.state, p.revision, p.updated_at = "RESERVED", p.revision + 1, now
     session.flush()
     _evidence(session, tenant_id, "COLLATERAL_RESERVED", actor_id=actor_id, actor_type=actor_type, role=actor_role,
-              entity_type="col_proposal", entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
+              entity_type=PROPOSAL_TYPE, entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
               input_hashes=[p.proposal_hash], payload={"approval_id": approval_id, "legs": [l.lot_id for l in _legs(session, p)],
                                                        "status": "RESERVED_NOT_POSTED"})
     emit(session, event_type="ReservationCreated", tenant_id=tenant_id, correlation_id=p.correlation_id,
@@ -707,7 +831,7 @@ def reserve(session, tenant_id: str, proposal_id: str, approval_id: str, *, acto
 def cancel(session, tenant_id: str, proposal_id: str, *, actor_id: str, actor_role: str | None = None, reason: str = "",
            expected_revision: int | None = None, now: datetime | None = None) -> dict:
     now = now or utcnow()
-    p = _get(session, tenant_id, proposal_id)
+    p = _get(session, tenant_id, proposal_id, lock=True)
     if p.state == "CANCELLED":
         return proposal_out(session, p)  # idempotent
     _check_rev(p, expected_revision)
@@ -716,7 +840,7 @@ def cancel(session, tenant_id: str, proposal_id: str, *, actor_id: str, actor_ro
     _release(session, p, now)
     p.state, p.revision, p.updated_at = "CANCELLED", p.revision + 1, now
     session.flush()
-    _evidence(session, tenant_id, "COLLATERAL_PROPOSAL_CANCELLED", actor_id=actor_id, role=actor_role, entity_type="col_proposal",
+    _evidence(session, tenant_id, "COLLATERAL_PROPOSAL_CANCELLED", actor_id=actor_id, role=actor_role, entity_type=PROPOSAL_TYPE,
               entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id, rationale=reason or None,
               payload={"reservations_released": True})
     return proposal_out(session, p)
@@ -725,7 +849,7 @@ def cancel(session, tenant_id: str, proposal_id: str, *, actor_id: str, actor_ro
 def draft_instruction(session, tenant_id: str, proposal_id: str, *, actor_id: str, actor_role: str | None = None,
                       expected_revision: int | None = None, now: datetime | None = None) -> dict:
     now = now or utcnow()
-    p = _maybe_expire(session, _get(session, tenant_id, proposal_id), now)
+    p = _maybe_expire(session, _get(session, tenant_id, proposal_id, lock=True), now)
     if p.state == "DRAFTED":
         return get_instruction(session, tenant_id, proposal_id)
     _check_rev(p, expected_revision)
@@ -752,7 +876,7 @@ def draft_instruction(session, tenant_id: str, proposal_id: str, *, actor_id: st
     session.add(ColInstructionDraft(proposal_id=p.proposal_id, tenant_id=tenant_id, content=content, content_hash=h, created_by=actor_id))
     p.state, p.revision, p.updated_at = "DRAFTED", p.revision + 1, now
     session.flush()
-    _evidence(session, tenant_id, "COLLATERAL_INSTRUCTION_DRAFTED", actor_id=actor_id, role=actor_role, entity_type="col_proposal",
+    _evidence(session, tenant_id, "COLLATERAL_INSTRUCTION_DRAFTED", actor_id=actor_id, role=actor_role, entity_type=PROPOSAL_TYPE,
               entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id, output_hash=h,
               input_hashes=[p.proposal_hash], payload={"transmission": "NOT_TRANSMITTED"})
     emit(session, event_type="InstructionDrafted", tenant_id=tenant_id, correlation_id=p.correlation_id, aggregate_id=p.proposal_id,
@@ -773,7 +897,7 @@ def simulate_settlement(session, tenant_id: str, proposal_id: str, *, actor_id: 
                         expected_revision: int | None = None, now: datetime | None = None) -> dict:
     """Records a FAKE confirmed movement for the demo flow only. Clearly labelled SIMULATED; no external effect."""
     now = now or utcnow()
-    p = _get(session, tenant_id, proposal_id)
+    p = _get(session, tenant_id, proposal_id, lock=True)
     _check_rev(p, expected_revision)
     if p.state != "DRAFTED" or p.simulated_settlement:
         raise Conflict("Simulated settlement requires a DRAFTED proposal not yet settled", code="ILLEGAL_TRANSITION")
@@ -790,7 +914,7 @@ def simulate_settlement(session, tenant_id: str, proposal_id: str, *, actor_id: 
     p.simulated_settlement = {"status": "SIMULATED_SETTLED", "label": "SIMULATED - no real movement occurred", "at": now.isoformat()}
     p.revision, p.updated_at = p.revision + 1, now
     session.flush()
-    _evidence(session, tenant_id, "COLLATERAL_SIMULATED_SETTLED", actor_id=actor_id, role=actor_role, entity_type="col_proposal",
+    _evidence(session, tenant_id, "COLLATERAL_SIMULATED_SETTLED", actor_id=actor_id, role=actor_role, entity_type=PROPOSAL_TYPE,
               entity_id=p.proposal_id, revision=p.revision, correlation_id=p.correlation_id,
               payload={"label": "SIMULATED", "transmission": "NOT_TRANSMITTED"})
     return proposal_out(session, p)
@@ -839,10 +963,11 @@ def stress(session, tenant_id: str, margin_result_id: str, inventory_snapshot_id
     state = "HYPOTHETICAL"
     p = _persist(session, tenant_id, ctx, ev, kind="STRESS", state=state, actor_id=actor_id, correlation_id=cid, need=need_s,
                  hypothetical=True, now=now)
-    _evidence(session, tenant_id, "COLLATERAL_STRESS_RUN", actor_id=actor_id, role=actor_role, entity_type="col_proposal",
+    _evidence(session, tenant_id, "COLLATERAL_STRESS_RUN", actor_id=actor_id, role=actor_role, entity_type=PROPOSAL_TYPE,
               entity_id=p.proposal_id, revision=p.revision, correlation_id=cid, effective_at=ctx["as_of"],
               input_hashes=[ctx["snap"].content_hash, ctx["margin"].get("result_hash")],
-              payload={"hypothetical": True, "stress": st, "solver_status": p.solver_status})
+              payload={"hypothetical": True, "stress": st, "solver_status": p.solver_status,
+                       "parents": _parents(ctx, inventory_snapshot_id), "replay": _replay_spec(p, ctx)})
     out = proposal_out(session, p)
     summary = None
     if base is not None:
@@ -929,6 +1054,38 @@ def _svc_optimise(session, tenant_id, margin_result_id, inventory_snapshot_id, r
     return optimise(session, tenant_id, margin_result_id, inventory_snapshot_id, rule_set_hash, terms_hash, deadline, horizon_days, **kw)
 
 
+def replay_collateral(session, tenant_id: str, spec: dict) -> dict:
+    """replay.collateral (CONTRACTS v1.1): recompute a stored proposal from its PERSISTED inputs (margin result, inventory
+    snapshot rows with the availability the original run saw, terms/rule-set hashes, deadline, horizon, stress, required
+    coverage). Pure read: nothing is persisted; VERITAS additionally wraps this in a savepoint that is always rolled back.
+    Raises (-> NOT_REPLAYABLE) if an upstream input changed (e.g. terms hash) or is unavailable."""
+    inp = spec.get("inputs") or {}
+    ctx = _context(session, tenant_id, inp["margin_result_id"], inp["inventory_snapshot_id"], inp.get("rule_set_hash"),
+                   inp.get("terms_hash"), inp["deadline"], int(inp["horizon_days"]))
+    need = Decimal(inp["required"])
+    kind, stress = inp.get("kind", "PROPOSAL"), inp.get("stress")
+    if need <= 0:
+        res = {"solver_status": "NOT_REQUIRED", "legs": [], "objective": "0", "residual": "0"}
+    else:
+        res = _evaluate(ctx, _lots(session, tenant_id, inp["inventory_snapshot_id"]), need, stress=stress,
+                        availability=inp.get("availability"))["res"]
+    return {"engine_version": SERVICE_VERSION, "method_version": METHOD_VERSION,
+            "business_hash": _business_hash(ctx, need, kind, stress, res.get("legs", [])),
+            "values": {"objective": res.get("objective") or "0", "residual": res.get("residual") or "0"}}
+
+
+def constraint_slacks(session, tenant_id: str, proposal_id: str) -> list[dict]:
+    """collateral.constraint_slacks (CONTRACTS v1.1): per-constraint {name, limit, used, slack, binding} (+kind, unit) of a stored
+    proposal. `used` is the measured value. Dual values are NOT included (valid only for continuous LP; see proposal result)."""
+    _get(session, tenant_id, proposal_id)
+    rows = session.execute(select(ColConstraint).where(ColConstraint.tenant_id == tenant_id, ColConstraint.proposal_id == proposal_id)
+                           .order_by(ColConstraint.id)).scalars()
+    return [{"name": c.name, "kind": c.kind, "limit": c.limit_value, "used": c.measured_value, "slack": c.slack,
+             "binding": c.binding, "unit": c.unit} for c in rows]
+
+
+services.register("replay.collateral", replay_collateral)
+services.register("collateral.constraint_slacks", constraint_slacks)
 services.register("collateral.optimise", _svc_optimise)
 services.register("collateral.verify", verify)
 services.register("collateral.reserve", reserve)

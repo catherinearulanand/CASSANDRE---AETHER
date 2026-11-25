@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core import services
 from app.core.canonical import domain_hash
@@ -111,13 +111,50 @@ def append(
     return ev
 
 
-def verify_chain(session, tenant_id: str, checkpoint: dict | None = None, checkpoints: list[dict] | None = None) -> dict:
-    """Recompute every hash. If a trusted checkpoint {sequence, head_hash} is supplied, also detect
-    truncation / tail rewrite (a bare hash chain cannot detect a privileged truncation by itself)."""
-    rows = session.execute(select(EvEvent).where(EvEvent.tenant_id == tenant_id).order_by(EvEvent.sequence)).scalars().all()
+def verify_chain(session, tenant_id: str, checkpoint: dict | None = None, checkpoints: list[dict] | None = None,
+                 start_after: dict | None = None, chunk: int = 5000) -> dict:
+    """Recompute event hashes in ONE streaming pass (bounded memory), checking links, sequence, head and trusted anchors.
+
+    mode FULL (default): every event from genesis.
+    mode INCREMENTAL (`start_after={"sequence": S, "head_hash": H}`, a TRUSTED signed anchor): the event at S must exist with
+    event_hash == H, then only events with sequence > S are recomputed. TRUST ASSUMPTION (reported in the result): events
+    <= S are NOT re-hashed in this pass, so row-content modification of events <= S since the verification that produced the
+    anchor is detected only by a FULL pass. Anchors are always point-checked (truncation/rewrite below any anchor is caught).
+    A bare hash chain cannot detect privileged tail truncation; only trusted anchors can."""
+    base_seq, base_hash = (int(start_after["sequence"]), start_after["head_hash"]) if start_after else (0, GENESIS)
+    anchors = ([checkpoint] if checkpoint is not None else []) + list(checkpoints or [])
+    want = {int(cp["sequence"]): cp["head_hash"] for cp in anchors if int(cp["sequence"]) > 0}
+    anchor_seen: dict[int, str] = {}
     problems: list[dict] = []
-    prev, expected_seq = GENESIS, 1
-    for ev in rows:
+    prev, expected_seq = base_hash, base_seq + 1
+    examined, last_seq, last_hash = 0, base_seq if start_after else 0, base_hash if start_after else GENESIS
+    # CONSISTENT SNAPSHOT under concurrent appends: take the committed head FIRST and verify only events up to it.
+    # (An append commits its event and the head together, so every event <= head.sequence is already visible.)
+    # Verifying "all rows" then comparing with a LATER head read produced false HEAD_MISMATCH failures on PostgreSQL.
+    head0 = session.execute(select(EvChainHead).where(EvChainHead.tenant_id == tenant_id)
+                            .execution_options(populate_existing=True)).scalar_one_or_none()
+    upper = head0.sequence if head0 is not None else None
+    q = select(EvEvent).where(EvEvent.tenant_id == tenant_id)
+    if upper is not None:
+        q = q.where(EvEvent.sequence <= upper)
+    if start_after:
+        q = q.where(EvEvent.sequence >= base_seq)
+    stream = session.execute(q.order_by(EvEvent.sequence).execution_options(yield_per=chunk))
+    first = True
+    for ev in stream.scalars():
+        if start_after and first:
+            first = False
+            if ev.sequence != base_seq or ev.event_hash != base_hash:
+                problems.append({"problem": "INCREMENTAL_BASE_NOT_REPRODUCED", "anchor_sequence": base_seq,
+                                 "detail": "the trusted anchor used as the incremental base is not reproduced by the stored chain"})
+                # fall through: still examine what follows so the report is useful
+                prev, expected_seq = ev.event_hash if ev.sequence == base_seq else base_hash, base_seq + 1
+            if ev.sequence in want:
+                anchor_seen[ev.sequence] = ev.event_hash
+            if ev.sequence == base_seq:
+                last_seq, last_hash = ev.sequence, ev.event_hash
+                continue
+        examined += 1
         if ev.sequence != expected_seq:
             problems.append({"sequence": ev.sequence, "problem": "SEQUENCE_GAP_OR_REORDER", "expected": expected_seq})
             expected_seq = ev.sequence
@@ -125,21 +162,43 @@ def verify_chain(session, tenant_id: str, checkpoint: dict | None = None, checkp
             problems.append({"sequence": ev.sequence, "problem": "PREV_HASH_MISMATCH"})
         if compute_event_hash(tenant_id, ev.sequence, ev.prev_hash, _fields_of(ev)) != ev.event_hash:
             problems.append({"sequence": ev.sequence, "problem": "EVENT_HASH_MISMATCH"})
+        if ev.sequence in want:
+            anchor_seen[ev.sequence] = ev.event_hash
         prev, expected_seq = ev.event_hash, expected_seq + 1
-    head = session.get(EvChainHead, tenant_id)
-    if head is not None and (head.sequence != (rows[-1].sequence if rows else 0) or head.head_hash != (rows[-1].event_hash if rows else GENESIS)):
-        problems.append({"problem": "HEAD_MISMATCH", "detail": "stored chain head differs from last event"})
-    by_seq = {e.sequence: e for e in rows}
-    anchors = ([checkpoint] if checkpoint is not None else []) + list(checkpoints or [])
-    for cp in anchors:  # every trusted anchor is checked in the SAME pass over the rows
-        seq, hh = int(cp["sequence"]), cp["head_hash"]
-        match = by_seq.get(seq)
-        if seq > 0 and (match is None or match.event_hash != hh):
+        last_seq, last_hash = ev.sequence, ev.event_hash
+        session.expunge(ev)  # keep the identity map small on very long chains
+    if start_after and first:  # no rows at all >= base
+        problems.append({"problem": "INCREMENTAL_BASE_NOT_REPRODUCED", "anchor_sequence": base_seq,
+                         "detail": "no events at or after the trusted anchor (chain truncated below it)"})
+    if head0 is not None:
+        if head0.sequence != last_seq or head0.head_hash != last_hash:
+            problems.append({"problem": "HEAD_MISMATCH", "detail": "stored chain head differs from last event"})
+    # events recorded BEYOND the (re-read) head are a rewrite/forgery, not a concurrent append (appends move the head atomically)
+    # ORDER MATTERS: read the max event sequence FIRST, then the head. An append commits event+head together, so a head read
+    # AFTER the max read is always >= it for legitimate appends (the reverse order raced into a false mismatch on PostgreSQL).
+    max_seq = session.execute(select(func.max(EvEvent.sequence)).where(EvEvent.tenant_id == tenant_id)).scalar_one()
+    head1 = session.execute(select(EvChainHead).where(EvChainHead.tenant_id == tenant_id)
+                            .execution_options(populate_existing=True)).scalar_one_or_none()
+    if max_seq is not None and max_seq > (head1.sequence if head1 is not None else 0):
+        problems.append({"problem": "HEAD_MISMATCH", "detail": "events exist beyond the stored chain head"})
+    # Anchors not met in the streamed range (those strictly below an incremental base) are point-checked.
+    for seq, hh in want.items():
+        if seq in anchor_seen:
+            got = anchor_seen[seq]
+        else:
+            row = session.execute(select(EvEvent.event_hash).where(EvEvent.tenant_id == tenant_id, EvEvent.sequence == seq)).first()
+            got = row[0] if row else None
+        if got != hh:
             problems.append({"problem": "CHECKPOINT_NOT_REPRODUCED", "anchor_sequence": seq,
                              "detail": f"trusted checkpoint at seq {seq} not found/mismatched (truncation or rewrite)"})
-    return {"tenant_id": tenant_id, "events": len(rows), "valid": not problems, "problems": problems,
-            "head_sequence": rows[-1].sequence if rows else 0, "head_hash": rows[-1].event_hash if rows else GENESIS,
-            "checkpoint_checked": bool(anchors)}
+    total = last_seq
+    out = {"tenant_id": tenant_id, "events": (examined if not start_after else total), "valid": not problems, "problems": problems,
+           "head_sequence": last_seq, "head_hash": last_hash, "checkpoint_checked": bool(anchors),
+           "mode": "INCREMENTAL" if start_after else "FULL", "events_recomputed": examined}
+    if start_after:
+        out.update(verified_from_sequence=base_seq,
+                   trust_assumption=f"events 1..{base_seq} were NOT re-hashed in this pass (trusted from the anchor's earlier verification); run a FULL verification to re-check them")
+    return out
 
 
 def check_expected_actions(session, tenant_id: str, correlation_id: str, expected: dict[str, list[str]]) -> dict:

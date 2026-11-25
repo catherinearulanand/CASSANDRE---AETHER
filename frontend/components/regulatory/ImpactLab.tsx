@@ -9,14 +9,15 @@ interface Row {
   account_id: string | null; status: string; reason?: string; note?: string; currency?: string; baseline_required?: string; hypothetical_required?: string; delta_required?: string;
   eligible_posted?: string | null; baseline_shortfall?: string; hypothetical_shortfall?: string | null; coverage_note?: string; unknown_rules: string[]; conflicts: string[];
   baseline_rule_set_hash: string; hypothetical_rule_set_hash: string;
+  feasibility?: { status: string; reason?: string; solver_status?: string; proposal_state?: string; proposal_id?: string; required_coverage?: string; residual?: string; currency?: string; note?: string };
 }
 interface Impact {
   impact_id: string; status: string; banner: string; created_at: string; params: { as_of: string; hypothetical_rule_ids: string[] };
   results: { rows: Row[]; counts: Record<string, number>; aggregate_by_currency: Record<string, Record<string, string | number>>; changed_rule_keys: string[]; liquidity_feasibility: string; assumptions: string[]; affected_controls: { note: string } };
 }
 const SAMPLE: Record<string, string> = {
-  ETD_DOMESTIC: JSON.stringify([{ account_id: "ACC-DEMO-NSE-001", context: { market_type: "ETD_DOMESTIC", venue: "DEMO_NSE" }, snapshot_id: "SNAP-ETD-001" }], null, 1),
-  ETD_IFSC: JSON.stringify([{ account_id: "ACC-DEMO-IFSC-001", context: { market_type: "ETD_IFSC", venue: "DEMO_IFSC" }, snapshot_id: "SNAP-IFSC-001" }], null, 1),
+  ETD_DOMESTIC: JSON.stringify([{ account_id: "ACC-DEMO-NSE-001", context: { market_type: "ETD_DOMESTIC", venue: "DEMO_NSE", currency: "INR" }, snapshot_id: "SNAP-ETD-001", inventory_snapshot_id: "INV-ETD-001", deadline: "2026-08-19T04:00:00Z", horizon_days: 30 }], null, 1),
+  ETD_IFSC: JSON.stringify([{ account_id: "ACC-DEMO-IFSC-001", context: { market_type: "ETD_IFSC", venue: "DEMO_IFSC", currency: "USD" }, snapshot_id: "SNAP-IFSC-001", inventory_snapshot_id: "INV-IFSC-001", deadline: "2026-08-19T04:00:00Z", horizon_days: 30 }], null, 1),
   OTC: JSON.stringify([{ account_id: "NS-MER-NWD-001", context: { market_type: "OTC", currency: "USD" }, snapshot_id: "SNAP-SHOCK-001", terms_hash: "<frozen terms hash>" }], null, 1),
 };
 const TONE: Record<string, "ok" | "warn" | "danger" | "neutral"> = { COMPUTED: "ok", UNAFFECTED: "neutral", BLOCKED: "danger", COMPLETED: "ok", PARTIAL: "warn" };
@@ -27,6 +28,7 @@ export default function ImpactLab({ initialImpact }: { initialImpact?: string | 
   const rules = useLoad(() => api<{ items: Rule[] }>("/regulatory/rules?limit=500"), []);
   const hist = useLoad(() => api<{ items: { impact_id: string; status: string; created_at: string }[] }>("/regulatory/impact"), []);
   const [sel, setSel] = useState<string[]>([]); const [asOfIn, setAsOfIn] = useState(asOf); const [accts, setAccts] = useState(SAMPLE[market]);
+  const [feas, setFeas] = useState(false);
   const [res, setRes] = useState<Impact | null>(null); const [err, setErr] = useState<ApiError | string | null>(null); const [busy, setBusy] = useState(false);
   useEffect(() => { setAccts(SAMPLE[market]); setRes(null); }, [market]); // different market => drop stale results
   useEffect(() => { if (initialImpact) api<Impact>(`/regulatory/impact/${initialImpact}`).then(setRes).catch(e => setErr(e)); }, [initialImpact]);
@@ -35,7 +37,7 @@ export default function ImpactLab({ initialImpact }: { initialImpact?: string | 
   async function run() {
     setBusy(true); setErr(null); setRes(null);
     try {
-      const r = await api<Impact>("/regulatory/impact", { method: "POST", idempotencyKey: newKey(), body: { as_of: asOfIn, hypothetical_rule_ids: sel, accounts: JSON.parse(accts) } });
+      const r = await api<Impact>("/regulatory/impact", { method: "POST", idempotencyKey: newKey(), body: { as_of: asOfIn, hypothetical_rule_ids: sel, accounts: JSON.parse(accts), include_feasibility: feas } });
       setRes(r); hist.reload();
     } catch (e) { setErr(e instanceof SyntaxError ? `Accounts JSON is invalid: ${e.message}` : (e as ApiError)); } finally { setBusy(false); }
   }
@@ -60,6 +62,9 @@ export default function ImpactLab({ initialImpact }: { initialImpact?: string | 
           <label htmlFor="acc" style={{ marginTop: 12 }}>Accounts, contexts and pinned snapshot ids (JSON)</label>
           <textarea id="acc" rows={9} className="mono" value={accts} onChange={e => setAccts(e.target.value)} style={{ padding: 8 }} />
           {err && (typeof err === "string" ? <div role="alert" className="field-error">{err}</div> : <div style={{ marginTop: 8 }}><ErrorState error={err} /></div>)}
+          <label className="row" style={{ margin: "12px 0 0", color: "var(--text)", flexWrap: "nowrap", alignItems: "flex-start" }}>
+            <input type="checkbox" id="feas" style={{ width: 18, minHeight: 18 }} checked={feas} onChange={e => setFeas(e.target.checked)} />
+            Also ask the collateral optimiser whether the extra requirement is coverable (creates a HYPOTHETICAL proposal; no asset moves)</label>
           <div className="row" style={{ marginTop: 12 }}><button className="primary" disabled={!canRun || busy || sel.length === 0} onClick={run}>{busy ? "Running…" : "Run counterfactual"}</button>
             {!canRun && <span className="faint">Analyst role required</span>}{sel.length === 0 && <span className="faint">Select at least one revision</span>}</div>
         </section>
@@ -81,6 +86,10 @@ export default function ImpactLab({ initialImpact }: { initialImpact?: string | 
               <td className="r">{r.hypothetical_shortfall != null ? <MoneyDisplay amount={r.hypothetical_shortfall} currency={r.currency!} signed={false} /> : "not computed"}</td>
               <td>{r.reason ?? r.note ?? r.coverage_note ?? ""}{r.unknown_rules.length > 0 && <div><StatusChip tone="warn">unknown scope: {r.unknown_rules.join(", ")}</StatusChip></div>}
                 {r.conflicts.length > 0 && <div><StatusChip tone="danger">conflict: {r.conflicts.join(", ")}</StatusChip></div>}
+                {r.feasibility && <div data-testid="feasibility" style={{ marginTop: 4 }}>
+                  <StatusChip tone={r.feasibility.status === "EVALUATED" && r.feasibility.solver_status === "optimal" ? "ok" : r.feasibility.status === "EVALUATED" ? "warn" : "neutral"}>
+                    Coverage feasibility: {r.feasibility.status === "EVALUATED" ? `${r.feasibility.solver_status}, residual ${r.feasibility.residual}` : r.feasibility.status}</StatusChip>
+                  <div className="faint">{r.feasibility.reason ?? r.feasibility.note}</div></div>}
                 <div className="mono faint">rule sets {short(r.baseline_rule_set_hash)} → {short(r.hypothetical_rule_set_hash)}</div></td></tr>)}
           </tbody></table></div>
           <h3 style={{ marginTop: 16 }}>Aggregates (like currencies only)</h3>

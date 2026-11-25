@@ -15,6 +15,8 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.errors import NotFound, Unavailable, ValidationFailed
+from app.db.base import lock_for_update, utcnow
+from app.engines.evidence._db import insert_ignore
 from app.engines.evidence.models import EvObject
 
 _TENANT_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
@@ -36,11 +38,27 @@ def object_path(tenant_id: str, content_hash: str) -> Path:
 
 
 def store_object(session, tenant_id: str, data: bytes, classification: str) -> str:
-    """Store bytes; returns sha256 hex. Raises Unavailable if the store cannot be written (callers block)."""
+    """Store bytes; returns sha256 hex. Raises Unavailable if the store cannot be written (callers block).
+
+    Concurrency (found on PostgreSQL): the object row is created with INSERT .. ON CONFLICT DO NOTHING, then LOCKED, and only
+    then is the blob written if absent. A concurrent purge of the same TEMP object therefore cannot unlink the blob between
+    'row exists' and 'blob written'. If the same bytes are stored again with a non-TEMP classification, the row is UPGRADED so
+    protected evidence is never left classified TEMP (and purgeable)."""
     if classification not in CLASSIFICATIONS:
         raise ValidationFailed(f"unknown classification {classification!r}", field_errors={"classification": "unsupported"})
     h = hashlib.sha256(data).hexdigest()
     p = object_path(tenant_id, h)
+    for _attempt in (1, 2):  # second attempt only if a concurrent purge deleted the row while we waited for the lock
+        insert_ignore(session, EvObject, tenant_id=tenant_id, content_hash=h, classification=classification,
+                      size_bytes=len(data), created_at=utcnow())
+        row = session.execute(lock_for_update(select(EvObject).where(EvObject.tenant_id == tenant_id, EvObject.content_hash == h))
+                              .execution_options(populate_existing=True)).scalar_one_or_none()
+        if row is not None:
+            break
+    else:
+        raise Unavailable("object registry busy; retry", code="EVIDENCE_OBJECT_RETRY")
+    if row.classification == "TEMP" and classification != "TEMP":
+        row.classification = classification
     try:
         if not p.exists():
             p.parent.mkdir(parents=True, exist_ok=True)
@@ -49,9 +67,7 @@ def store_object(session, tenant_id: str, data: bytes, classification: str) -> s
             os.replace(tmp, p)  # atomic publish
     except OSError as exc:
         raise Unavailable(f"evidence object store unavailable: {exc.strerror or exc}", code="EVIDENCE_STORAGE_UNAVAILABLE") from exc
-    if session.get(EvObject, (tenant_id, h)) is None:
-        session.add(EvObject(tenant_id=tenant_id, content_hash=h, classification=classification, size_bytes=len(data)))
-        session.flush()
+    session.flush()
     return h
 
 
@@ -94,15 +110,23 @@ def storage_probe() -> dict:
 
 
 def purge_temp_objects(session, tenant_id: str, *, older_than_days: int, legal_hold: bool = False) -> dict:
-    """Controlled purge for NON-EVIDENCE temporary objects only. Protected audit material is never purged here."""
+    """Controlled purge for NON-EVIDENCE temporary objects only. Protected audit material is never purged here.
+
+    The TEMP_OBJECTS retention row is created if absent and LOCKED, so a concurrent legal-hold change is serialised with the
+    purge (either the hold is visible here, or the purge completed first). Selected rows are locked before the blobs are
+    unlinked so a concurrent store of the same bytes waits and then re-registers the object."""
     from datetime import timedelta
 
-    from app.db.base import utcnow
-    if legal_hold:
+    from app.engines.evidence.models import EvRetention
+    insert_ignore(session, EvRetention, tenant_id=tenant_id, category="TEMP_OBJECTS", legal_hold=False, updated_at=utcnow())
+    ret = session.execute(lock_for_update(select(EvRetention).where(EvRetention.tenant_id == tenant_id, EvRetention.category == "TEMP_OBJECTS"))
+                          .execution_options(populate_existing=True)).scalar_one()
+    if legal_hold or ret.legal_hold:
         return {"purged": 0, "reason": "LEGAL_HOLD"}
     cutoff = utcnow() - timedelta(days=older_than_days)
-    rows = session.execute(select(EvObject).where(EvObject.tenant_id == tenant_id, EvObject.classification == "TEMP",
-                                                  EvObject.created_at < cutoff)).scalars().all()
+    rows = session.execute(lock_for_update(select(EvObject).where(
+        EvObject.tenant_id == tenant_id, EvObject.classification == "TEMP", EvObject.created_at < cutoff))
+        .execution_options(populate_existing=True)).scalars().all()
     for r in rows:
         object_path(tenant_id, r.content_hash).unlink(missing_ok=True)
         session.delete(r)

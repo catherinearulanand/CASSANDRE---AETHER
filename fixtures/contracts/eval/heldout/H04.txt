@@ -1,0 +1,10 @@
+FICTIONAL HELD-OUT CREDIT SUPPORT ANNEX H04 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-HELD-H04 to Master MA-HELD-H04
+Party A: Sable Demo Capital. Party B: Tern Demo Partners.
+Base Currency: USD.
+Effective Date: 2026-09-04.
+
+Paragraph 1. Credit Support Terms (tabular form).
+| Party | Threshold | Minimum Transfer Amount |
+| Sable Demo Capital | USD 5,000,000 | USD 100,000 |
+| Tern Demo Partners | USD 5,000,000 | USD 100,000 |

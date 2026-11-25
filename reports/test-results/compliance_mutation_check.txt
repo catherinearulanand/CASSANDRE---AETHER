@@ -1,0 +1,6 @@
+('waiver lock', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 12.68s]')
+('transition/dismissal lock', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 20.50s]')
+('recheck lock', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 13.45s]')
+('duplicate-evaluation/case race handling', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 15.94s]')
+('model status noop+lock', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 14.83s]')
+('model version retry', 'FAILS without fix (good)  [1 failed, 5 deselected, 1 warning in 25.80s]')

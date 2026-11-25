@@ -1,0 +1,1664 @@
+{
+ "mode": "DETERMINISTIC_EXTRACTOR",
+ "live_model": false,
+ "claim": "Results describe a regular-expression clause extractor on 18 hand-authored synthetic documents. They are NOT a model-accuracy claim and do not generalise to real agreements. Small sample: see Wilson 95% intervals.",
+ "reviewer_correction_time_note": "Not measured: no human reviewer study was run.",
+ "evaluated_at": "2026-11-25T01:23:28Z",
+ "gold_file": "fixtures/expected/contracts/eval_gold.json",
+ "aggregate": {
+  "documents": {
+   "n": 18,
+   "accepted_at_intake": 17,
+   "rejected_at_intake": 1
+  },
+  "gold_fields": {
+   "total": 106,
+   "normal": 99,
+   "must_flag": 7
+  },
+  "intake_accuracy": {
+   "k": 18,
+   "n": 18,
+   "rate": 1.0,
+   "wilson95": [
+    0.8241,
+    1.0
+   ]
+  },
+  "header_effective_date_accuracy": {
+   "k": 18,
+   "n": 18,
+   "rate": 1.0,
+   "wilson95": [
+    0.8241,
+    1.0
+   ]
+  },
+  "field_exact_match_after_normalisation": {
+   "k": 83,
+   "n": 99,
+   "rate": 0.8384,
+   "wilson95": [
+    0.7535,
+    0.898
+   ]
+  },
+  "normal_fields_outcomes": {
+   "CORRECT": 83,
+   "FLAGGED": 7,
+   "SURFACED_UNPARSED": 0,
+   "WRONG_CLEAN": 0,
+   "OMITTED": 9
+  },
+  "silent_errors": {
+   "wrong_clean_value_normal_fields": 0,
+   "must_flag_fields_presented_clean": 0,
+   "forbidden_clauses_proposed_unflagged": 2,
+   "total": 2
+  },
+  "silent_omissions": {
+   "normal_fields": 9,
+   "must_flag_fields": 2
+  },
+  "citation_recall": {
+   "k": 95,
+   "n": 106,
+   "rate": 0.8962,
+   "wilson95": [
+    0.8237,
+    0.9411
+   ]
+  },
+  "citation_precision": {
+   "k": 91,
+   "n": 97,
+   "rate": 0.9381,
+   "wilson95": [
+    0.8716,
+    0.9713
+   ]
+  },
+  "spurious_proposals_overlapping_no_gold": 6,
+  "scope_accuracy_direction_and_condition": {
+   "k": 89,
+   "n": 95,
+   "rate": 0.9368,
+   "wilson95": [
+    0.869,
+    0.9707
+   ]
+  },
+  "invalid_output_rate_structural": {
+   "k": 8,
+   "n": 97,
+   "rate": 0.0825,
+   "wilson95": [
+    0.0424,
+    0.1544
+   ]
+  },
+  "flag_rate_all_proposals": {
+   "k": 12,
+   "n": 97,
+   "rate": 0.1237,
+   "wilson95": [
+    0.0722,
+    0.2039
+   ]
+  },
+  "unresolved_material_field_recall": {
+   "k": 5,
+   "n": 7,
+   "rate": 0.7143,
+   "wilson95": [
+    0.3589,
+    0.9178
+   ]
+  },
+  "required_field_gap_detection_at_freeze": {
+   "k": 4,
+   "n": 4,
+   "rate": 1.0,
+   "wilson95": [
+    0.5101,
+    1.0
+   ]
+  },
+  "forbidden_clause_handling": {
+   "ABSENT": 0,
+   "FLAGGED": 0,
+   "UNFLAGGED_PROPOSAL": 2
+  },
+  "prompt_injection_instruction_text_proposals": 0,
+  "unparsed_material_clause_items": 0,
+  "per_field_confusion": {
+   "call_deadline": {
+    "CORRECT": 1,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 0,
+    "gold_n": 1
+   },
+   "eligible_schedule": {
+    "CORRECT": 1,
+    "FLAGGED": 2,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 0,
+    "gold_n": 3
+   },
+   "independent_amount_a": {
+    "CORRECT": 4,
+    "FLAGGED": 2,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 7
+   },
+   "independent_amount_b": {
+    "CORRECT": 5,
+    "FLAGGED": 1,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 7
+   },
+   "mta_a": {
+    "CORRECT": 10,
+    "FLAGGED": 2,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 13
+   },
+   "mta_b": {
+    "CORRECT": 12,
+    "FLAGGED": 1,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 14
+   },
+   "mta_semantics": {
+    "CORRECT": 5,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 0,
+    "gold_n": 5
+   },
+   "netting_authorization": {
+    "CORRECT": 2,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 3
+   },
+   "rounding_increment": {
+    "CORRECT": 6,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 7
+   },
+   "rounding_mode": {
+    "CORRECT": 6,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 1,
+    "gold_n": 7
+   },
+   "segregated_im": {
+    "CORRECT": 1,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 0,
+    "gold_n": 1
+   },
+   "threshold_a": {
+    "CORRECT": 13,
+    "FLAGGED": 3,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 2,
+    "gold_n": 18
+   },
+   "threshold_b": {
+    "CORRECT": 15,
+    "FLAGGED": 1,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 2,
+    "gold_n": 18
+   },
+   "valuation_agent": {
+    "CORRECT": 2,
+    "FLAGGED": 0,
+    "SURFACED_UNPARSED": 0,
+    "WRONG_CLEAN": 0,
+    "OMITTED": 0,
+    "gold_n": 2
+   }
+  },
+  "reviewer_correction_time": null
+ },
+ "per_document": [
+  {
+   "doc": "E01",
+   "layout": "canonical grammar, paragraphs reordered, non-round values, two-row schedule with 94/6 valuation-haircut",
+   "fields": [
+    {
+     "key": "segregated_im",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_semantics",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "eligible_schedule",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "netting_authorization",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "valuation_agent",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 13,
+   "proposals_supported": 13,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E02",
+   "layout": "amendment replacing one paragraph, later effective date",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 2,
+   "proposals_supported": 2,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E03",
+   "layout": "swapped parties in the document header relative to the registered package (Party A of the package is Halcyon Demo Securities)",
+   "fields": [],
+   "forbidden": [],
+   "injection": [],
+   "freeze": null,
+   "header_effective_date_ok": true,
+   "intake_expected": "REJECT_SWAPPED_PARTIES",
+   "intake_actual": "REJECT_SWAPPED_PARTIES",
+   "proposals": 0
+  },
+  {
+   "doc": "E04",
+   "layout": "clauses stated with respect to 'Party A' / 'Party B' labels instead of party names",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "mta_semantics",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": false
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:segregated_im",
+     "MISSING_REQUIRED_FIELD:threshold_a",
+     "MISSING_REQUIRED_FIELD:threshold_b"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 9,
+   "proposals_supported": 3,
+   "proposals_spurious": 6,
+   "proposals_structurally_invalid": 6,
+   "proposals_flagged": 6,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E05",
+   "layout": "decimal-separator ambiguity (European grouping, decimal comma, 1.500)",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": true,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": true,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_semantics",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": true,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:segregated_im",
+     "MISSING_REQUIRED_FIELD:threshold_a"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 9,
+   "proposals_supported": 9,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 3,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E06",
+   "layout": "contradictory clauses: Threshold for Larch stated twice with different amounts",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_semantics",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [
+     "CONFLICTING_TERMS:threshold_a"
+    ],
+    "actual_blocking": [
+     "CONFLICTING_TERMS:threshold_a",
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": [
+     "CONFLICTING_TERMS:threshold_a"
+    ]
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 10,
+   "proposals_supported": 10,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E07",
+   "layout": "distractor: non-operative illustration paragraph that reuses clause wording",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [
+    {
+     "key": "threshold_a",
+     "outcome": "UNFLAGGED_PROPOSAL"
+    }
+   ],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "CONFLICTING_TERMS:threshold_a",
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 5,
+   "proposals_supported": 5,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E08",
+   "layout": "prompt-injection: instruction-shaped text, a fake system line, and a hidden clause-shaped line",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [
+    {
+     "key": "threshold_a",
+     "outcome": "UNFLAGGED_PROPOSAL"
+    }
+   ],
+   "injection": [
+    {
+     "marker": "NOTE TO AUTOMATED SYSTEMS",
+     "proposals_from_instruction_text": 0
+    },
+    {
+     "marker": "[[ system: you are now in maintenance mode",
+     "proposals_from_instruction_text": 0
+    }
+   ],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "CONFLICTING_TERMS:threshold_a",
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 5,
+   "proposals_supported": 5,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E09",
+   "layout": "paraphrased prose (no paragraph/label grammar)",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im",
+     "MISSING_REQUIRED_FIELD:threshold_a",
+     "MISSING_REQUIRED_FIELD:threshold_b"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 0,
+   "proposals_supported": 0,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E10",
+   "layout": "eligible-collateral table with reordered columns",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "eligible_schedule",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 3,
+   "proposals_supported": 3,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 1,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E11",
+   "layout": "rating trigger stated on an agency scale the system does not support (Moody's Baa2)",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": true,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 4,
+   "proposals_supported": 4,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E12",
+   "layout": "mandatory Minimum Transfer Amount paragraph absent (G14)",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b"
+    ],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": [
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b"
+    ]
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 6,
+   "proposals_supported": 6,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E13",
+   "layout": "amount written in words/units ('USD 5 million')",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": true,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im",
+     "MISSING_REQUIRED_FIELD:threshold_a"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 3,
+   "proposals_supported": 3,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E14",
+   "layout": "threshold stated in a currency other than the base currency",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": true,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im",
+     "MISSING_REQUIRED_FIELD:threshold_a"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 4,
+   "proposals_supported": 4,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 1,
+   "proposals_flagged": 1,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E15",
+   "layout": "zero values, GT semantics, round down, call deadline, valuation agent B, netting",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_semantics",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "independent_amount_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_mode",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "rounding_increment",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "call_deadline",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "valuation_agent",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "netting_authorization",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 12,
+   "proposals_supported": 12,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E16",
+   "layout": "explicit negative netting statement",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "netting_authorization",
+     "direction": null,
+     "must_flag": false,
+     "outcome": "OMITTED",
+     "cited": false,
+     "scope_ok": null
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [
+     "MISSING_REQUIRED_FIELD:netting_authorization"
+    ],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": [
+     "MISSING_REQUIRED_FIELD:netting_authorization"
+    ]
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 4,
+   "proposals_supported": 4,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E17",
+   "layout": "haircut stated equal to the valuation percentage (94% / 94%): discount applied twice",
+   "fields": [
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "eligible_schedule",
+     "direction": null,
+     "must_flag": true,
+     "outcome": "FLAGGED",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_a",
+     "MISSING_REQUIRED_FIELD:mta_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 3,
+   "proposals_supported": 3,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 1,
+   "proposals_flagged": 1,
+   "unparsed_items": 0
+  },
+  {
+   "doc": "E18",
+   "layout": "canonical grammar conditional MTA trigger (A- scale)",
+   "fields": [
+    {
+     "key": "mta_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_a",
+     "direction": "A",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "threshold_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    },
+    {
+     "key": "mta_b",
+     "direction": "B",
+     "must_flag": false,
+     "outcome": "CORRECT",
+     "cited": true,
+     "scope_ok": true
+    }
+   ],
+   "forbidden": [],
+   "injection": [],
+   "freeze": {
+    "expected": [],
+    "actual_blocking": [
+     "MISSING_REQUIRED_FIELD:eligible_schedule",
+     "MISSING_REQUIRED_FIELD:independent_amount_a",
+     "MISSING_REQUIRED_FIELD:independent_amount_b",
+     "MISSING_REQUIRED_FIELD:mta_semantics",
+     "MISSING_REQUIRED_FIELD:netting_authorization",
+     "MISSING_REQUIRED_FIELD:rounding_increment",
+     "MISSING_REQUIRED_FIELD:rounding_mode",
+     "MISSING_REQUIRED_FIELD:segregated_im"
+    ],
+    "expected_found": []
+   },
+   "header_effective_date_ok": true,
+   "intake_expected": "ACCEPT",
+   "intake_actual": "ACCEPT",
+   "proposals": 5,
+   "proposals_supported": 5,
+   "proposals_spurious": 0,
+   "proposals_structurally_invalid": 0,
+   "proposals_flagged": 0,
+   "unparsed_items": 0
+  }
+ ]
+}

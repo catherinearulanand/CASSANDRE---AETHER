@@ -34,16 +34,44 @@ def signing_message(tenant_id: str, sequence: int, head_hash: str, key_id: str, 
                             "key_id": key_id, "created_at": created_at})
 
 
-def create_checkpoint(session, tenant_id: str, *, require_valid_chain: bool = True) -> dict:
-    """Sign the current head. Refuses to anchor a chain that does not verify (would bless a tampered state)."""
+def latest_trusted_checkpoint(tenant_id: str) -> dict | None:
+    """Newest exported checkpoint whose signature verifies (scans file names newest-first; stops at the first valid one)."""
+    d = checkpoint_dir(tenant_id)
+    for f in sorted(d.glob("cp-*.json"), reverse=True) if d.exists() else []:
+        try:
+            cp = json.loads(f.read_text())
+        except (OSError, ValueError):
+            continue
+        try:
+            if verify_checkpoint_signature(cp):
+                return cp
+        except (KeyError, ValueError, TypeError):
+            continue
+    return None
+
+
+def create_checkpoint(session, tenant_id: str, *, require_valid_chain: bool = True, mode: str = "incremental") -> dict:
+    """Sign the current head. Refuses to anchor a chain that does not verify (would bless a tampered state).
+
+    mode="incremental" (default): verify only the events since the newest trusted exported checkpoint (cost proportional to
+    NEW events), point-checking that anchor. Falls back to a FULL pass when no trusted checkpoint exists.
+    mode="full": recompute every event (use for explicit audit actions and periodically).
+    The incremental pass does not re-hash events at/below the previous anchor (see verify_chain's trust assumption)."""
+    if mode not in ("incremental", "full"):
+        raise ValidationFailed("mode must be 'incremental' or 'full'", field_errors={"mode": "incremental|full"})
     if require_valid_chain:
-        v = verify_chain(session, tenant_id)
+        base = latest_trusted_checkpoint(tenant_id) if mode == "incremental" else None
+        v = verify_chain(session, tenant_id, start_after={"sequence": base["sequence"], "head_hash": base["head_hash"]}
+                         if base and int(base["sequence"]) > 0 else None)
         if not v["valid"]:
             raise ValidationFailed("chain does not verify; refusing to sign a checkpoint over it",
                                    field_errors={"chain": f"{len(v['problems'])} problem(s)"})
-    head = session.get(EvChainHead, tenant_id)
-    seq = head.sequence if head else 0
-    hh = head.head_hash if head else "0" * 64
+    if require_valid_chain:
+        seq, hh = v["head_sequence"], v["head_hash"]  # sign EXACTLY the head that was verified (appends may have landed since)
+    else:
+        head = session.execute(select(EvChainHead).where(EvChainHead.tenant_id == tenant_id)
+                               .execution_options(populate_existing=True)).scalar_one_or_none()
+        seq, hh = (head.sequence, head.head_hash) if head else (0, "0" * 64)
     now = utcnow()
     created = now.strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     kid = keys.current_key_id()
@@ -58,7 +86,9 @@ def create_checkpoint(session, tenant_id: str, *, require_valid_chain: bool = Tr
     session.add(EvCheckpoint(checkpoint_id=cid, tenant_id=tenant_id, sequence=seq, head_hash=hh, key_id=kid,
                              signature=sig, created_at=now, exported_path=str(path)))
     session.flush()
-    return {"checkpoint_id": cid, **cp, "exported_path": str(path)}
+    return {"checkpoint_id": cid, **cp, "exported_path": str(path),
+            "verification": {"mode": v["mode"] if require_valid_chain else "SKIPPED",
+                             "events_recomputed": v["events_recomputed"] if require_valid_chain else 0}}
 
 
 def verify_checkpoint_signature(cp: dict, pub=None) -> bool:
@@ -88,9 +118,14 @@ def exported_checkpoints(tenant_id: str) -> list[dict]:
     return out
 
 
-def verify_against_exported(session, tenant_id: str) -> dict:
+def verify_against_exported(session, tenant_id: str, mode: str = "full") -> dict:
     """Verify the chain against the strongest trusted anchor: the newest exported checkpoint with a valid signature.
-    Also checks every other exported anchor (a truncation below ANY signed anchor is detected)."""
+    Also checks every other exported anchor (a truncation below ANY signed anchor is detected).
+
+    mode="full" (default): recompute every event. mode="incremental": recompute only events after the newest valid anchor
+    (all anchors are still point-checked); the result carries `trust_assumption` and `mode`."""
+    if mode not in ("full", "incremental"):
+        raise ValidationFailed("mode must be 'full' or 'incremental'", field_errors={"mode": "full|incremental"})
     cps = [c for c in exported_checkpoints(tenant_id)]
     bad_sigs = [c for c in cps if not c["signature_valid"]]
     good = [c for c in cps if c["signature_valid"]]
@@ -99,7 +134,9 @@ def verify_against_exported(session, tenant_id: str) -> dict:
         r.update(checkpoint_checked=False, anchor_status="NO_TRUSTED_ANCHOR",
                  invalid_signature_anchors=len(bad_sigs))
         return r
-    base = verify_chain(session, tenant_id, checkpoints=[{"sequence": c["sequence"], "head_hash": c["head_hash"]} for c in good])
+    start = {"sequence": good[0]["sequence"], "head_hash": good[0]["head_hash"]} if mode == "incremental" and int(good[0]["sequence"]) > 0 else None
+    base = verify_chain(session, tenant_id, checkpoints=[{"sequence": c["sequence"], "head_hash": c["head_hash"]} for c in good],
+                        start_after=start)
     problems = list(base["problems"])
     head = session.get(EvChainHead, tenant_id)
     for c in good:

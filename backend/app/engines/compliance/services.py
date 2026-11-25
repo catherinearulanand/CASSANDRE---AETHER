@@ -25,6 +25,10 @@ def _open_or_update_case(session, tenant_id, evaluation_id, actor_id="system"):
     return engine.case_out(c) if c else None
 
 
+from app.core.events import subscribe  # noqa: E402
+from app.engines.compliance import schedule  # noqa: E402
+
+subscribe("RuleActivated", "compliance.reevaluate", schedule.on_rule_activated)
 services.register("compliance.evaluate", _evaluate)
 services.register("compliance.recheck", _recheck)
 services.register("compliance.open_or_update_case", _open_or_update_case)

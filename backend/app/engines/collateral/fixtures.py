@@ -88,7 +88,7 @@ def otc() -> dict:
     lots = [
         _lot("CASH-USD-OTC", "CASH", "USD", "6000000", "1", "0.050", entitled=[ns]),
         _lot("GSEC-USD-OTC", "GSEC", "USD", "100000", "100", "0.045", entitled=[ns], lag=1, rating="AAA", maturity="2030-05-01",
-             issuer="Demo Treasury", group="IG-UST"),
+             issuer="Demo Treasury", group="IG-UST", issuer_class="SOVEREIGN"),
         _lot("CORP-USD-OTC", "CORP", "USD", "30000", "100", "0.060", entitled=[ns], lag=1, rating="A", maturity="2028-01-31",
              issuer="Demo Corp Delta", group="IG-DELTA", issuer_class="CORPORATE"),
         _lot("CORP-USD-WW", "CORP", "USD", "30000", "100", "0.020", entitled=[ns], lag=1, rating="A", maturity="2028-01-31",

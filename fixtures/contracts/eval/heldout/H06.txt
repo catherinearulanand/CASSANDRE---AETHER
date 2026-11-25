@@ -1,0 +1,14 @@
+FICTIONAL HELD-OUT CREDIT SUPPORT ANNEX H06 (SYNTHETIC - NOT A LEGAL DOCUMENT)
+Reference: CSA-HELD-H06 to Master MA-HELD-H06
+Party A: Sable Demo Capital. Party B: Tern Demo Partners.
+Base Currency: USD.
+Effective Date: 2026-09-06.
+
+Paragraph 1. Threshold.
+(a) Threshold with respect to Sable Demo Capital: USD 4,000,000.
+(b) Threshold with respect to Tern Demo Partners: USD 4,000,000.
+
+Paragraph 5. Eligible Collateral.
+| Asset | Currency | Issuer | Valuation Percentage | Haircut | FX Haircut | Concentration Cap | Min Rating | Max Maturity |
+| CASH | USD | ANY | 100% | 0% | 0% | 25% of total allocated | none | none |
+| CORP_BOND | USD | CORPORATE | 90% | 10% | 0% | 25 percent of total | A | 7 |

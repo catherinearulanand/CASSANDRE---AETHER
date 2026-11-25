@@ -116,3 +116,41 @@ def test_reconcile_and_stress_endpoints(seeded):
     assert m.get(f"/api/v1/risk/stress/{st.json()['stress_id']}").status_code == 200
     bad = m.post("/api/v1/risk/stress", json={"base_result_id": rid, "shock_spec": {"price_shock_pct": 0.05}})  # float rejected
     assert bad.status_code == 422
+
+
+# ---------------------------------------------------------------- round 2: contract v1.1 over HTTP
+def test_v11_position_metrics_and_reconciliation_status_endpoints(seeded):
+    v = login(seeded, "tenant-a", "viewer")
+    g = v.get("/api/v1/risk/position-metrics", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "2026-08-17T04:00:00Z"})
+    assert g.status_code == 200
+    j = g.json()
+    assert j["gross_lots"] == "60" and j["notional"] == "36000000.00" and j["client_class"] == "UNKNOWN"
+    r = v.get("/api/v1/risk/reconciliation-status", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "2026-08-17T04:00:00Z"}).json()
+    assert r["status"] == "OK" and r["expected_total"] == "10000000"
+    u = v.get("/api/v1/risk/reconciliation-status", params={"account_id": "ACC-NOBODY", "as_of": "2026-08-17T04:00:00Z"}).json()
+    assert u["status"] == "UNKNOWN"
+    assert v.get("/api/v1/risk/position-metrics", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "not-a-date"}).status_code == 422
+    assert v.get("/api/v1/risk/position-metrics", params={"account_id": "ACC-DEMO-NSE-001"}).status_code == 422  # as_of is mandatory: no implicit clock
+
+
+def test_v11_endpoints_are_tenant_scoped_and_authenticated(seeded):
+    from fastapi.testclient import TestClient
+    assert TestClient(seeded.app).get("/api/v1/risk/position-metrics", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "2026-08-17T04:00:00Z"}).status_code == 401
+    b = login(seeded, "tenant-b", "viewer")  # tenant B has no seeded risk data: must see NOTHING of tenant A's account
+    j = b.get("/api/v1/risk/position-metrics", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "2026-08-17T04:00:00Z"}).json()
+    assert j["available"] is False and j["gross_lots"] is None
+    assert b.get("/api/v1/risk/reconciliation-status", params={"account_id": "ACC-DEMO-NSE-001", "as_of": "2026-08-17T04:00:00Z"}).json()["status"] == "UNKNOWN"
+
+
+def test_terms_resolve_reports_the_known_at_it_used(seeded, monkeypatch):
+    seen = {}
+
+    def provider(session, tenant_id, ns, as_of, known_at, fact_snapshot_id=None):
+        seen["known_at"] = known_at
+        return {"status": "RESOLVED", "terms_hash": "h" * 64, "terms": {"base_currency": "USD"}, "blocking_reasons": []}
+    monkeypatch.setitem(services._REGISTRY, "contracts.resolve_terms", provider)
+    m = login(seeded, "tenant-a", "maker")
+    a = m.post("/api/v1/risk/terms/resolve", json={"netting_set_id": "NS-MER-NWD-001", "as_of": "2026-08-17T04:00:00Z"}).json()
+    assert a["known_at_source"] == "SERVER_RECORDING_TIME" and a["known_at"] > "2026-08-17T04:00:00"  # recording time is server time, not as_of
+    b = m.post("/api/v1/risk/terms/resolve", json={"netting_set_id": "NS-MER-NWD-001", "as_of": "2026-08-17T04:00:00Z", "known_at": "2026-08-18T00:00:00Z"}).json()
+    assert b["known_at_source"] == "CALLER" and seen["known_at"].isoformat().startswith("2026-08-18T00:00:00")
