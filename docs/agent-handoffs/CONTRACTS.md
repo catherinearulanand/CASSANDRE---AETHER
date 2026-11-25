@@ -57,3 +57,15 @@ Actions are `UPPER_SNAKE` verbs; every engine must emit evidence for each conseq
 
 ## Events
 Use `app.core.events.emit(...)` for the catalogue in `EVENT_TYPES`; owner per `EVENT_OWNER`. Only the owner emits a type.
+
+## Contract v1.1 additions (lead-accepted, ADDITIVE only)
+- Evidence events for consequential writes SHOULD carry `payload.parents = [{"entity_type","entity_id"}, ...]` (lineage edges) and replayable
+  computations carry `payload.replay = {"replayer":"replay.<engine>","engine_version","method_version","business_hash","inputs":{...},"values"?,"tolerance"?}`;
+  each engine registers `replay.<engine>(session, tenant_id, spec) -> {"engine_version","method_version","business_hash","values"?}`. See `app/engines/evidence/replay.py`.
+  The business hash excludes run IDs, timestamps and audit sequence.
+- risk: `MarginResult` gains `as_of` and `snapshot_as_of` (ISO UTC); new services `risk.get_positions(session, tenant_id, account_id, as_of)` returning
+  `{"gross_lots","net_lots","delta_equivalent_lots","notional","currency","client_class","as_of","source"}` and
+  `risk.reconciliation_status(session, tenant_id, account_id, as_of)` returning `{"status":"OK|EXCEPTION|UNKNOWN","expected_total","imported_total","difference","currency","file_id"}`.
+- collateral: `collateral.constraint_slacks(session, tenant_id, proposal_id)` returning per-constraint `{"name","limit","used","slack","binding"}`.
+- Bitemporal: callers must pass `known_at` at/after a terms freeze when calculating with those terms.
+- Concurrency rule (learned on PostgreSQL): every read-check-write mutation must lock the row (`lock_for_update` + `populate_existing`) before checking revision/state.
