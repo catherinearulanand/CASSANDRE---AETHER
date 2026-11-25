@@ -87,12 +87,17 @@ def summarise(xs):
             "min_s": round(min(xs), 4), "max_s": round(max(xs), 4), "mean_s": round(statistics.fmean(xs), 4), "all_s": [round(x, 4) for x in xs]}
 
 
+LAT: list[float] = []   # individual resolve_rules call latencies (seconds), every call of every per_call sweep
+
+
 def sweep_per_call(tenant, ctxs):
     with SessionLocal() as db:
         t = time.perf_counter()
         n_app = 0
         for c in ctxs:
+            t1 = time.perf_counter()
             r = resolve_rules(db, tenant, c, AS_OF, None)
+            LAT.append(time.perf_counter() - t1)
             n_app += len(r["applicable"])
         db.commit()
         return time.perf_counter() - t, n_app
@@ -111,6 +116,9 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--reps", type=int, default=30)
     ap.add_argument("--warmups", type=int, default=5)
+    ap.add_argument("--only-batch", action="store_true", help="re-measure only the batch path and merge it into an existing --out file")
+    ap.add_argument("--per-call-reps", dest="per_call_reps", type=int, default=2)
+    ap.add_argument("--machine-load", dest="machine_load", default="not recorded")
     ap.add_argument("--out", default=str(Path(__file__).resolve().parents[4] / "reports" / "benchmarks" / "regulatory.json"))
     a = ap.parse_args(argv)
     create_all() if get_engine().dialect.name == "sqlite" or os.environ.get("AETHER_AUTO_CREATE_SCHEMA") == "true" else None
@@ -123,13 +131,24 @@ def main(argv=None):
            "target": "p95 < 3 s per sweep of 2,000 contexts x 50 rules (spec section 14, 'Rule evaluation')", "setup_s": round(setup_s, 2),
            "env": {"db": get_engine().dialect.name, "os": platform.platform(), "python": sys.version.split()[0], "cpus": os.cpu_count(),
                    "commit": os.popen("git rev-parse --short HEAD 2>nul || git rev-parse --short HEAD").read().strip() or "uncommitted"},
-           "as_of": AS_OF.isoformat(), "warmups": a.warmups, "reps": a.reps}
-    for name, fn in (("per_call", sweep_per_call), ("batch", sweep_batch)):
+           "as_of": AS_OF.isoformat(), "warmups": a.warmups, "reps": a.reps, "per_call_reps": a.per_call_reps, "machine_load_before": a.machine_load}
+    paths = (("per_call", sweep_per_call, a.per_call_reps, 0), ("batch", sweep_batch, a.reps, a.warmups))
+    if a.only_batch:
+        prev = json.loads(Path(a.out).read_text())
+        out = prev | {k: v for k, v in out.items() if k in ("env", "machine_load_before", "reps", "warmups", "setup_s")} | {"batch_remeasured_only": True}
+        paths = paths[1:]
+    for name, fn, reps, warm in paths:
         cold, napp = fn(tenant, ctxs)   # first sweep of this path in this process = cold
-        for _ in range(a.warmups):
+        for _ in range(warm):
             fn(tenant, ctxs)
-        xs = [fn(tenant, ctxs)[0] for _ in range(a.reps)]
+        if name == "per_call":
+            LAT.clear()   # latency distribution = warm sweeps only (the cold sweep is reported separately)
+        xs = [fn(tenant, ctxs)[0] for _ in range(reps)]
         s = summarise(xs)
+        if name == "per_call":
+            s["note"] = ("full 2,000-context sweeps are ~100 s each so only per_call_reps are run; the n>=30 statistic for this path is the "
+                         "single-call latency distribution below (n = 2000 x warm sweeps)")
+            s["single_call_latency"] = {"n": len(LAT), "p50_s": round(statistics.median(LAT), 5), "p95_s": round(pct(LAT, 0.95), 5), "p99_s": round(pct(LAT, 0.99), 5), "max_s": round(max(LAT), 5)}
         s["cold_first_sweep_s"] = round(cold, 4)
         s["applicable_rule_hits_per_sweep"] = napp
         s["contexts_per_second_p50"] = round(N_CONTEXTS / s["p50_s"], 1)

@@ -1,59 +1,59 @@
 {
  "base": "http://localhost:3101",
- "rule_key": "DEMO-E2E-2214B149",
+ "rule_key": "DEMO-E2E-B2708D35",
  "steps": [
   {
    "step": "maker ingests fictional source",
    "ok": true,
-   "seconds": 1.92,
-   "detail": "source ingested (2214B149)"
+   "seconds": 1.31,
+   "detail": "source ingested (B2708D35)"
   },
   {
    "step": "deterministic extraction shows candidate",
    "ok": true,
-   "seconds": 0.55,
+   "seconds": 0.56,
    "detail": "2 table rows; candidate shows 1.10"
   },
   {
    "step": "maker drafts rule from candidate",
    "ok": true,
-   "seconds": 1.17,
-   "detail": "rule 5b146a12 drafted"
+   "seconds": 1.03,
+   "detail": "rule f3d46c5b drafted"
   },
   {
    "step": "maker submits for review",
    "ok": true,
-   "seconds": 0.23,
+   "seconds": 0.17,
    "detail": "status REVIEW REQUIRED"
   },
   {
    "step": "maker cannot approve own rule (G15)",
    "ok": true,
-   "seconds": 0.96,
+   "seconds": 0.63,
    "detail": "UI disabled; API 403 SELF_APPROVAL"
   },
   {
    "step": "checker approves exact revision",
    "ok": true,
-   "seconds": 1.4,
+   "seconds": 0.97,
    "detail": "APPROVED by independent checker; approval trail shows APPROVED"
   },
   {
    "step": "checker schedules rule",
    "ok": true,
-   "seconds": 1.1,
+   "seconds": 1.0,
    "detail": "SCHEDULED (effective 2027-02-01, after the pinned as-of)"
   },
   {
    "step": "impact lab via real risk+collateral",
    "ok": true,
-   "seconds": 1.88,
+   "seconds": 1.6,
    "detail": "INR 10,000,000 -> 12,500,000; posted 11,500,000; shortfall 1,000,000; feasibility optimal; HYPOTHETICAL"
   },
   {
    "step": "rule state persisted",
    "ok": true,
-   "seconds": 0.17,
+   "seconds": 0.18,
    "detail": "rule SCHEDULED; maker != checker recorded"
   },
   {

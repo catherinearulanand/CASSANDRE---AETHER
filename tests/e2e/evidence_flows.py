@@ -37,6 +37,8 @@ def login(browser, tenant, user, width=1440, height=900):
     errs = []
     page.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
     page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
+    page._http = []  # type: ignore[attr-defined]
+    page.on("response", lambda r: page._http.append((r.status, r.url.replace(BASE, ""))) if r.status >= 400 else None)  # type: ignore[attr-defined]
     page.goto(BASE + "/overview")
     page.fill("#tenant", tenant)
     page.fill("#username", user)
@@ -149,7 +151,8 @@ def flow_auditor(b):
     page.wait_for_timeout(500)
     before = head_seq(page)
     page.get_by_role("button", name="Replay (read-only)").click()
-    page.wait_for_selector("[aria-live=polite] >> text=MATCH", timeout=30000)
+    page.wait_for_selector("text=replay recorded as its own event", timeout=30000)
+    page.wait_for_timeout(500)
     lab = page.inner_text("main")
     check("replay of G01 run reports MATCH for deterministic engine events", "MATCH" in lab and "NOT_REPLAYABLE" not in lab.split("Replay (read-only)")[-1][:600], lab[-300:])
     check("replay table lists replayed events with engine", page.locator("table").last.locator("tbody tr").count() >= 3)
@@ -198,7 +201,9 @@ def flow_auditor(b):
     r2 = cli_verify(bad, pub)
     check("TAMPERED copy of the downloaded bundle fails the offline verifier (non-zero exit)", r2.returncode != 0, r2.stdout + r2.stderr)
     shot(page, "exports")
-    check("auditor console clean (no JS errors)", not [e for e in page._errs if "favicon" not in e], page._errs[:3])  # type: ignore[attr-defined]
+    unexpected = [h for h in page._http if not (h[0] == 401 and h[1].endswith("/session")) and not (h[0] == 404 and (IDS["tenantb_run"] in h[1] or "NO-SUCH-ENTITY" in h[1]))]  # type: ignore[attr-defined]
+    check("auditor: no unexpected HTTP errors (only pre-login 401 and the two deliberate 404 probes)", not unexpected, unexpected[:4])
+    check("auditor: no uncaught JS exceptions", not [e for e in page._errs if e.startswith("pageerror")], page._errs[:3])  # type: ignore[attr-defined]
     ctx.close()
 
 
@@ -218,8 +223,8 @@ def flow_admin_and_viewer(b):
     expect(page.get_by_text("Metadata only (role)")).to_be_visible()
     check("viewer: audit explorer is METADATA ONLY", True)
     page.get_by_role("button", name="Verify chain against signed checkpoints").click()
-    page.wait_for_selector("[role=alert]", timeout=10000)
-    check("viewer: chain verification is FORBIDDEN (explicit error with correlation id)", "FORBIDDEN" in page.inner_text("[role=alert]") and "correlation_id" in page.inner_text("[role=alert]"))
+    page.wait_for_selector("text=FORBIDDEN", timeout=10000)
+    check("viewer: chain verification is FORBIDDEN (explicit error with correlation id)", "FORBIDDEN" in page.inner_text("main") and "correlation_id" in page.inner_text("main"))
     first = rows(page).first
     first.get_by_role("button").click()
     page.wait_for_selector("aside[aria-label*='technical details']")

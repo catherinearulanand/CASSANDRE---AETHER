@@ -96,13 +96,13 @@ export default function ReviewWorkspace({ pkg, terms, reload }: { pkg: PkgDetail
 
       <div className="card" aria-labelledby="dir-h">
         <h2 id="dir-h">Directional terms (Party A / Party B)</h2>
-        <div className="scroll-x"><table>
+        <div className="scroll-x" role="region" tabIndex={0} aria-label="Directional terms table (scrollable)"><table>
           <caption className="sr-only">Thresholds, minimum transfer amounts and independent amounts by party</caption>
           <thead><tr><th>Term</th><th>Party A — {pkg.party_a_name}</th><th>Party B — {pkg.party_b_name}</th></tr></thead>
           <tbody>{DIRECTIONAL.map(([k, label]) => (
             <tr key={k}>{[<td key="l">{label}</td>, ...(["A", "B"] as const).map(d => (
               <td key={d}>{byKey(k, d).length === 0 ? <StatusChip tone="danger">missing</StatusChip> : byKey(k, d).map(f => (
-                <div key={f.field_id}><button onClick={() => setSel(f)} aria-label={`Open ${label} for party ${d}`} style={{ minHeight: 28, padding: "0 8px" }}><ValueView v={f.value} /></button>{" "}
+                <div key={f.field_id}><button onClick={() => setSel(f)} style={{ minHeight: 28, padding: "0 8px" }}><span className="sr-only">Open {label} for party {d}: </span><ValueView v={f.value} /></button>{" "}
                   <StatusChip tone={TONE[f.status]}>{f.status}</StatusChip><Condition c={f.condition} /></div>))}</td>))]}</tr>))}</tbody></table></div>
         <p className="faint">Direction is taken from the party named in the quoted clause, never from table position. Missing required terms block freezing.</p>
       </div>
@@ -120,7 +120,7 @@ export default function ReviewWorkspace({ pkg, terms, reload }: { pkg: PkgDetail
         </section>
         <section className="card" aria-labelledby="fld-h"><h2 id="fld-h">Structured terms ({fields.length})</h2>
           {fields.length === 0 ? <EmptyState title="No extracted fields yet" /> :
-            <div className="scroll-x" style={{ maxHeight: 300, overflow: "auto" }}><table>
+            <div className="scroll-x" role="region" tabIndex={0} aria-label="Structured terms table (scrollable)" style={{ maxHeight: 300, overflow: "auto" }}><table>
               <caption className="sr-only">Extracted fields with status</caption>
               <thead><tr><th>Field</th><th>Dir</th><th>Value</th><th>Status</th><th>Mode</th></tr></thead>
               <tbody>{fields.map(f => (

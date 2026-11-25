@@ -921,7 +921,7 @@ def get_positions(session, tenant_id: str, account_id: str, as_of) -> dict:
         try:
             m = etd.position_metrics(pos, insts, MarketData(snap.payload), latest.date())
         except (PricingError, KeyError, ValueError, ArithmeticError) as exc:
-            last_err = exc
+            last_err = last_err or exc  # keep the reason from the LATEST snapshot (the one a user would expect to be used)
             continue
         out["notional"], out["delta_equivalent_lots"] = m["notional"], m["delta_equivalent_lots"]
         out["source"] += f"; marks from snapshot {snap.snapshot_id} (data_as_of {snap.data_as_of.isoformat()})"

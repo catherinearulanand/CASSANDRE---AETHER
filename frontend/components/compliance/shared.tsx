@@ -11,14 +11,14 @@ export interface Evaluation {
   market_type: string; venue: string | null; status: string; severity: string; reasons: string[]; trace: { scope: unknown[]; condition: Record<string, unknown>[]; rule_currency?: string };
   measured: string | null; limit: string | null; gap: string | null; unit: string | null; as_of: string; snapshot_id: string | null;
   margin_result_id: string | null; allocation_id: string | null; facts: Record<string, unknown>; fact_provenance: Record<string, string>;
-  waiver_id: string | null; case_id: string | null; is_recheck: boolean; created_at: string;
+  waiver_id: string | null; case_id: string | null; is_recheck: boolean; created_at: string; hypothetical?: boolean; official?: boolean;
 }
 export interface CaseRow {
   case_id: string; kind: string; control_key: string; rule_version: number; family: string; subject_id: string; market_type: string; title: string;
   state: string; severity: string; last_status: string; owner_id: string | null; maker_id: string | null; opened_as_of: string; last_as_of: string; due_at: string;
   occurrence_count: number; reopen_count: number; margin_result_id: string | null; allocation_id: string | null; remediations: Remediation[];
   pending_dismissal: { requested_by: string; reason: string } | null; last_recheck: { evaluation_id: string; status: string; as_of: string } | null;
-  waiver_id: string | null; resolution: Record<string, string> | null; revision: number;
+  waiver_id: string | null; resolution: Record<string, string> | null; revision: number; hypothetical?: boolean;
 }
 export interface Remediation { id: string; selected: RemedyOption; rejected: { route: string; reason: string }[]; rationale: string; deadline: string; owner_id: string; proposed_by: string }
 export interface RemedyOption { route: string; label: string; target_engine: string | null; consequence: string; inputs?: Record<string, string | null> }
@@ -94,6 +94,14 @@ export function ConfirmAction({ label, title, children, onConfirm, disabled, pri
     <>
       <button className={primary ? "primary" : undefined} disabled={disabled} onClick={() => setOpen(true)}>{label}</button>
       <dialog ref={ref} onClose={() => setOpen(false)} onCancel={() => setOpen(false)} aria-labelledby="cf-title"
+        onKeyDown={e => {  // strict focus trap: Tab / Shift+Tab wrap inside the dialog instead of escaping to the browser chrome
+          if (e.key !== "Tab") return;
+          const f = Array.from(e.currentTarget.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"));
+          if (f.length === 0) return;
+          const first = f[0], last = f[f.length - 1], cur = document.activeElement;
+          if (e.shiftKey && (cur === first || !e.currentTarget.contains(cur))) { e.preventDefault(); last.focus(); }
+          else if (!e.shiftKey && (cur === last || !e.currentTarget.contains(cur))) { e.preventDefault(); first.focus(); }
+        }}
         style={{ background: "var(--panel)", color: "var(--text)", border: "1px solid var(--border)", borderRadius: 10, maxWidth: 520, width: "92vw" }}>
         <h2 id="cf-title">{title}</h2>
         <div className="muted">{children}</div>
@@ -128,4 +136,11 @@ export function Tabs<T extends string>({ tabs, value, onChange, label }: { tabs:
             color: value === k ? "var(--accent)" : "var(--text-2)", minHeight: 44 }}>{l}</button>))}
     </div>
   );
+}
+
+/** True when the viewport is narrower than `px` (phone / 400 % zoom). Client-only; false during SSR so markup is stable. */
+export function useNarrow(px = 760) {
+  const [n, setN] = useState(false);
+  useEffect(() => { const m = window.matchMedia(`(max-width:${px}px)`); const f = () => setN(m.matches); f(); m.addEventListener("change", f); return () => m.removeEventListener("change", f); }, [px]);
+  return n;
 }

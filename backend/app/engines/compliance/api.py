@@ -9,14 +9,21 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth.security import Principal, current_principal, get_db, require_roles
-from app.core.errors import NotFound, ValidationFailed
+from app.core.errors import NotFound
 from app.core.idempotency import run_idempotent
 from app.engines.compliance import cases as C
 from app.engines.compliance import controls as K
 from app.engines.compliance import engine as E
 from app.engines.compliance import schedule as SCH
 from app.engines.compliance import surv_service as SV
-from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpJob, CmpWaiver
+from app.engines.compliance.models import (
+    CmpCase,
+    CmpCaseEvent,
+    CmpControl,
+    CmpEvaluation,
+    CmpJob,
+    CmpWaiver,
+)
 
 router = APIRouter()
 WRITE = ("maker", "compliance_officer", "tenant_admin")
@@ -124,7 +131,7 @@ def register_control(body: ControlBody, db: Session = Depends(get_db), p: Princi
                      idempotency_key: str | None = IDEM):
     def make():
         c = K.register_control(db, p.tenant_id, body.model_dump())
-        E._ev(db, p.tenant_id, C.actor_of(p), "CONTROL_REGISTERED", "control", c.control_id, c.rule_version, c.control_id,
+        E._ev(db, p.tenant_id, C.actor_of(p), "CONTROL_REGISTERED", "cmp_control", c.control_id, c.rule_version, c.control_id,
               {"control_key": c.control_key, "rule_hash": c.rule_hash, "authority_type": c.authority_type}, effective_at=c.effective_from)
         return {"control_id": c.control_id, "control_key": c.control_key, "rule_version": c.rule_version, "rule_hash": c.rule_hash,
                 "support_status": c.support_status}
@@ -286,7 +293,7 @@ def supersede_control(control_key: str, body: SupersedeBody, db: Session = Depen
             K.validate_definition(probe)
         new, old = K.supersede_control(db, p.tenant_id, control_key, new_def, eff)
         actor = C.actor_of(p)
-        E._ev(db, p.tenant_id, actor, "CONTROL_SUPERSEDED", "control", new.control_id, new.rule_version, new.control_id,
+        E._ev(db, p.tenant_id, actor, "CONTROL_SUPERSEDED", "cmp_control", new.control_id, new.rule_version, new.control_id,
               {"control_key": control_key, "old_version": old.rule_version, "new_version": new.rule_version, "new_rule_hash": new.rule_hash,
                "old_rule_hash": old.rule_hash, "effective_from": eff.isoformat()}, effective_at=eff, rationale=body.reason)
         re = K.reevaluate_affected(db, p.tenant_id, control_key, eff, actor)

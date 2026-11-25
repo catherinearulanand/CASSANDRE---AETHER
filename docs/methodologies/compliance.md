@@ -16,7 +16,7 @@ All rules in the control library are `SYNTHETIC_POLICY` (fictional), not statute
 * Inputs: required margin from `risk.get_result` (status must be OK); eligible **posted** collateral from `collateral.coverage` (a proposal is not posted collateral).
   Callers may supply only an allow-listed set of facts (positions, classification, terms status, input timestamp…), labelled `CALLER_SUPPLIED`; margin and coverage amounts cannot be typed in.
   An input problem only affects controls that depend on that input.
-* Event-triggered: only control families whose inputs arrived are evaluated (`full_sweep`/`control_keys` override). Untriggered controls stay visibly *unevaluated*; unsupported controls (collateral concentration, settlement deadline, reporting schema) are listed as UNSUPPORTED with a reason.
+* Event-triggered: only control families whose inputs arrived are evaluated (`full_sweep`/`control_keys` override). Untriggered controls stay visibly *unevaluated*; controls whose inputs no engine provides are registered UNSUPPORTED (listed with the reason, never evaluated, never counted as passing). After round 2 all registered controls are supported.
 * Evaluations are idempotent on `eval_key` (control, revision, subject, snapshot, as_of, facts hash, inputs). Each persisted evaluation appends an evidence event in the same transaction.
 
 ## 2. Cases
@@ -37,9 +37,39 @@ All rules in the control library are `SYNTHETIC_POLICY` (fictional), not statute
   IsolationForest challenger: recall 0.690, PR-AUC 0.907. These are properties of an injected synthetic benchmark, **not** evidence of real-world detection. Sample is small; differences between models are within noise.
 * Anomalies open `ANOMALY_INVESTIGATION` cases titled “Investigation signal (not a finding)”. No evaluation row is created, so raw control status is unaffected (G22). A model can be DISABLED; a crude score-median drift ratio is reported (not a validated drift test).
 
-## 4. Known limitations
-* SQLite is used locally; PostgreSQL behaviour of the case/occurrence uniqueness and concurrency tests is **not** verified here.
-* No frozen contract exposes positions, reconciliation status or allocation slacks to compliance; those inputs are caller-supplied (labelled) or UNSUPPORTED. Proposed shared change: `risk.get_positions`, `risk.reconciliation_status`, `collateral.constraint_slacks`.
-* Control population (`CmpControl`) is a registry snapshot of rule revisions; automatic re-evaluation of affected accounts on rule activation (G23) is provided only as `supersede_control` (effective-dated revisions) — no event-driven re-evaluation job yet.
-* Scheduled (DAILY) evaluation / missed-run detection (S01) is **not implemented**: only event-triggered evaluation exists. `cmp_jobs` records surveillance training only.
-* Load: a single-process burst of 40 `evaluate()` calls (2 controls each) took ≈2 s on SQLite (≈20 events/s); no p50/p95 benchmark or rule-evaluation target (2,000 positions × 50 rules) was run.
+## 4. Round 2 additions (contract v1.1)
+### 4.1 Inputs now come from the owning engines
+* Position limit: `risk.get_positions(account, as_of)`. The control declares `required_basis = GROSS_FUTURES_EQUIV`; the explicit mapping (`BASIS_MAP`) takes the service's **`gross_lots`**.
+  No other basis is mapped (a control needing delta-equivalent/notional would be UNKNOWN until a mapping is reviewed). The service reports `client_class = "UNKNOWN"` because **no engine owns client classification**:
+  that is treated as a *missing input* (scope UNKNOWN => control UNKNOWN, with the reason `CLIENT_CLASSIFICATION_MISSING`), never as a value and never as NOT_APPLICABLE.
+  A caller may supply the classification; it is labelled `CALLER_SUPPLIED` and only fills a gap the service left.
+* Reconciliation: `risk.reconciliation_status` (`OK` -> MATCHED, `EXCEPTION` -> FAIL with the difference, `UNKNOWN` -> UNKNOWN).
+* Freshness: `input_as_of` = the **oldest** timestamp among all inputs used (risk `snapshot_as_of` preferred over `as_of`; positions; reconciliation file). A fresh calculation over a stale snapshot is stale.
+* A margin result belongs to one subject: if `risk.get_result` names another account the control is UNKNOWN (`MARGIN_RESULT_SUBJECT_MISMATCH`), never silently evaluated.
+* Hypothetical (what-if / draft-rule) margin results are flagged on the evaluation, evaluated into their **own** case (`[HYPOTHETICAL]`, separate occurrence key) and counted separately (`hypothetical_evaluations`); they never enter the official status counts.
+### 4.2 Newly supported controls (all SYNTHETIC_POLICY)
+| control | input | outcome rule |
+|---|---|---|
+| `CMP-COLL-CONC` | `collateral.constraint_slacks(proposal)` | FAIL if any constraint slack < 0 (zero slack is within the cap); UNKNOWN when unavailable |
+| `CMP-SETTLE-DEADLINE`(INR) / `-USD` | `collateral.coverage(account, settlement_deadline)` | **posted** collateral as of the deadline >= required margin; a proposal/reservation is never counted; the as-of coverage control still FAILs (no early credit) |
+| `CMP-REPORT-SCHEMA` | caller-supplied `report_record` | field presence + format (ISO currency, non-negative decimals, ISO-8601 with zone) against a **synthetic** demo schema. Not an approved regulatory format; nothing is transmitted |
+The round-1 UNSUPPORTED rows for these keys are retired (`active=false`, never deleted). The UNSUPPORTED mechanism remains and is tested (a control without inputs is listed with its reason and never evaluated).
+### 4.3 Scheduled evaluation (S01) and rule changes (G23)
+* `schedule.py`: slot = UTC business date of the **supplied** `as_of` (no server clock). A slot is due at 12:00Z + 2 h grace (fictional close). `run_sweep` evaluates every DAILY SUPPORTED control for the known population
+  and writes a `SCHEDULED_SWEEP` job with a watermark. `schedule_status` lists due/completed/missed slots and a stale-watermark flag; `record=true` writes one `MISSED_RUN_DETECTED` evidence event per newly missed slot (idempotent).
+  An empty alert list is never presented as compliance: a stale watermark or missed slot says the controls were **not evaluated**.
+* `POST /compliance/controls/{key}/supersede` (compliance officer/admin): new immutable revision, old gets `effective_to`; **only subjects previously evaluated by that control are re-evaluated**, from fresh inputs of the owning engines
+  as of the effective date; other controls and other subjects are untouched; old evaluations/cases stay. A `RuleActivated` outbox event re-evaluates only controls bound to that `rule_key` (older pinned revisions then evaluate UNKNOWN `CONTROL_STALE_VS_ACTIVE_RULE`).
+### 4.4 Evidence contract
+* Entity types follow evidence.md 4.1: `cmp_evaluation`, `cmp_case`, `cmp_control`, `cmp_waiver`, `cmp_job`, `cmp_model`. `payload.parents`: evaluation -> `risk_result` (margin result id), `col_proposal` (allocation id), `reg_rule` (when the regulatory service names the rule id); case events -> `cmp_evaluation`.
+* `CONTROL_EVALUATED` carries `payload.replay = {replayer: "replay.compliance", engine_version, method_version, business_hash, inputs: {evaluation_id}}` and `output_hash`. `replay.compliance` re-runs the **pure** evaluation from the persisted control revision, facts, stored input reasons and rule state
+  (read-only, no evidence/outbox writes). Business hash = canonical hash of `{status, reasons, measured, limit, gap, unit}`; ids and timestamps are excluded. Tested: MATCH, DIVERGED when a persisted fact is altered, NOT_REPLAYABLE when the replayer is unregistered.
+### 4.5 Concurrency (lock-before-check)
+Every read-check-write path locks the row (`lock_for_update` + `populate_existing`) or relies on a unique key with a savepoint-protected insert: case occurrence (create/update), evaluation `eval_key`, case transition/dismissal/remediation/recheck, waiver decision, model status (no-op flips write no evidence), model version allocation (retry on conflict).
+Six real-thread regression tests (`test_cmp_race_conditions.py`) were each run **with the guard removed** and fail (`reports/test-results/compliance_mutation_check.txt`).
+
+## 5. Known limitations
+* No engine owns client/proprietary/member classification: the position-limit control is UNKNOWN for every real account until one does (or a caller supplies a labelled value).
+* The sweep re-uses each subject's last pinned snapshot/margin-result ids; it does not create new margin runs. Stale inputs therefore evaluate UNKNOWN until risk/collateral produce fresh ones.
+* The report-schema control validates a **synthetic** schema only; there is no approved reporting schema and no submission.
+* Performance and host-load figures: see `reports/benchmarks/compliance_pg.json` (shared development host, not a clean-room measurement).

@@ -1,0 +1,134 @@
+[
+ {
+  "check": "exactly one h1",
+  "ok": true,
+  "detail": 1
+ },
+ {
+  "check": "no positive tabindex",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: registry - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "keyboard: Enter on a registry row opens the agreement",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "tabs: exactly one selected",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "tabs: roving tabindex (inactive tabs tabindex=-1)",
+  "ok": true,
+  "detail": [
+   "0",
+   "-1",
+   "-1"
+  ]
+ },
+ {
+  "check": "tabs: tabpanel is labelled by its tab",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "keyboard: ArrowRight moves selection and focus to the next tab",
+  "ok": true,
+  "detail": "Freeze & amendments"
+ },
+ {
+  "check": "keyboard: End selects the last tab",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "keyboard: Home selects the first tab",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "axe: tab Document review - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "axe: tab Freeze & amendments - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "axe: tab Eligibility & netting - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "axe: open field review panel - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "every form control has an accessible name",
+  "ok": true,
+  "detail": []
+ },
+ {
+  "check": "selected table row is exposed (aria-selected on rows)",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "source text viewer is keyboard-scrollable (tabindex=0 + label)",
+  "ok": true,
+  "detail": null
+ },
+ {
+  "check": "visible focus indicator on focused controls",
+  "ok": true,
+  "detail": [
+   "solid",
+   "2px",
+   "none"
+  ]
+ },
+ {
+  "check": "no empty status chips (status always has text)",
+  "ok": true,
+  "detail": 0
+ },
+ {
+  "check": "390px reflow: no page-level horizontal scroll on Document tab",
+  "ok": true,
+  "detail": [
+   390,
+   390
+  ]
+ },
+ {
+  "check": "390px reflow: no page-level horizontal scroll on Freeze tab",
+  "ok": true,
+  "detail": [
+   390,
+   390
+  ]
+ },
+ {
+  "check": "390px reflow: no page-level horizontal scroll on Eligibility tab",
+  "ok": true,
+  "detail": [
+   390,
+   390
+  ]
+ },
+ {
+  "check": "axe: 390px Eligibility tab - no serious/critical violations",
+  "ok": true,
+  "detail": []
+ }
+]

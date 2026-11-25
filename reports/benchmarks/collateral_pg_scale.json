@@ -1,0 +1,179 @@
+{
+  "engine": "ATLAS collateral",
+  "target": "p95 < 2 s for 1,000 eligible continuous lots (solver + independent feasibility)",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 140 Stepping 2, GenuineIntel",
+    "cpu_count": 8,
+    "ram_gb": 15.8,
+    "python": "3.14.3",
+    "scipy": "1.18.0",
+    "numpy": "2.4.3",
+    "solver": {
+      "solver": "HiGHS",
+      "highs_version": "1.15.1",
+      "scipy_version": "1.18.0",
+      "numpy_version": "2.4.3",
+      "feasibility_tolerance": 1e-07,
+      "tie_break_tolerance": 1e-12
+    },
+    "db": "PostgreSQL 16.16 (Debian 16.16-1.pgdg13+1) on x86_64-pc-linux-gnu (Docker, 127.0.0.1:5433, local loopback)",
+    "network": "none (loopback)",
+    "machine_load_before": {
+      "cpu_percent_total": 85.3,
+      "cpu_percent_max_core": 90.6,
+      "top_processes_cpu": [
+        [
+          0,
+          "wslservice.exe"
+        ],
+        [
+          0,
+          "wslrelay.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ]
+      ],
+      "mem_used_percent": 96.1
+    },
+    "machine_load_after": {
+      "cpu_percent_total": 87.7,
+      "cpu_percent_max_core": 89.8,
+      "top_processes_cpu": [
+        [
+          117.8,
+          "System Idle Process"
+        ],
+        [
+          87.5,
+          "python.exe"
+        ],
+        [
+          60.6,
+          "python.exe"
+        ],
+        [
+          34.0,
+          "System"
+        ],
+        [
+          19.9,
+          "explorer.exe"
+        ]
+      ],
+      "mem_used_percent": 94.0
+    },
+    "commit": "8199e077299173fe1ce687bf88b522cc40142da5",
+    "uncommitted_changes_possible": true
+  },
+  "data": {
+    "tier": "SCALE (10,000 lots, separate from the 1,000-lot target)",
+    "lots_total": 10000,
+    "eligible_lots": 10000,
+    "seed": 42,
+    "required_coverage": "266941238",
+    "caps": 121,
+    "generator": "scripts/bench_collateral.py gen_lots"
+  },
+  "method": {
+    "warmups": 2,
+    "measured_reps": 10,
+    "cold": "5 fresh subprocesses, first call each",
+    "concurrency": 1
+  },
+  "results": {
+    "pipeline_warm (solve+round+verify+baseline)": {
+      "n": 10,
+      "p50_s": 17.4708,
+      "p95_s": 18.9924,
+      "p99_s": 19.1672,
+      "mean_s": 17.3589,
+      "min_s": 15.6208,
+      "max_s": 19.211
+    },
+    "solver_only_warm": {
+      "n": 10,
+      "p50_s": 7.7426,
+      "p95_s": 8.425,
+      "p99_s": 8.435,
+      "mean_s": 7.8543,
+      "min_s": 7.1183,
+      "max_s": 8.4375
+    },
+    "service_optimise_end_to_end_warm (DB+eligibility+pipeline+persist+evidence)": {
+      "n": 10,
+      "p50_s": 22.132,
+      "p95_s": 23.7624,
+      "p99_s": 23.9324,
+      "mean_s": 22.1576,
+      "min_s": 20.1197,
+      "max_s": 23.9749
+    },
+    "pipeline_cold_s": [
+      23.4053,
+      19.3057,
+      17.8209,
+      16.8026,
+      18.1967
+    ],
+    "cold_incl_import_and_setup_s": [
+      32.367,
+      23.3547,
+      22.9996,
+      19.4695,
+      23.9416
+    ],
+    "pipeline_cold": {
+      "n": 5,
+      "p50_s": 18.1967,
+      "p95_s": 22.5854,
+      "p99_s": 23.2413,
+      "mean_s": 19.1062,
+      "min_s": 16.8026,
+      "max_s": 23.4053
+    },
+    "service_cold_first_call_fresh_process": {
+      "n": 5,
+      "p50_s": 24.4305,
+      "p95_s": 29.9026,
+      "p99_s": 30.0503,
+      "mean_s": 26.3029,
+      "min_s": 23.9045,
+      "max_s": 30.0872
+    },
+    "service_cold_outcomes": [
+      [
+        "CHECKED",
+        "optimal"
+      ]
+    ],
+    "inventory_import_once_s": 18.517
+  },
+  "failures": {
+    "pipeline_failures_or_unverified": 0,
+    "service_outcomes": [
+      [
+        "optimal",
+        "CHECKED"
+      ]
+    ]
+  },
+  "target_met": {
+    "pipeline_warm_p95_lt_2s": false,
+    "service_warm_p95_lt_2s": false
+  },
+  "notes": [
+    "Engineering target, not an SLA; numbers apply to this machine/run only.",
+    "Failed or slow measurements are retained in the aggregates, not discarded."
+  ]
+}

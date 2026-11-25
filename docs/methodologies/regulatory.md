@@ -84,8 +84,33 @@ _BECAME_EFFECTIVE`, `APPROVAL_DENIED/_EXPIRED`, `IMPACT_RUN_COMPLETED`. Outbox e
 RuleActivated, RuleSuperseded` (A1 is the sole owner). `ApprovalRecorded` belongs to the platform and is not emitted here.
 `rule_parameters`/`resolve_rules` pin a rule-set snapshot (idempotent insert) without an evidence event, because they are reads.
 
+## 6a. Round-2 additions (VERITAS contract v1.1, concurrency, batch resolve)
+**Lineage (`payload.parents`).** `RULE_DRAFTED`, `RULE_APPROVED`, `RULE_ACTIVATED/SCHEDULED` carry parents `source_span:<span_id>`; their
+`source_spans` carry `{span_id, document_id, start, end, page}` so VERITAS builds source -> span -> rule. Approval is its own entity
+(`APPROVAL_RECORDED`, entity type `approval`, parent `reg_rule`). `IMPACT_RUN_COMPLETED` has parents: hypothetical rules, both rule sets, every risk
+result used and every ATLAS proposal. `source_span`, `approval`, `rule_set`, `risk_result`, `col_proposal` are VERITAS type aliases/stages.
+
+**Replay (`replay.regulatory`).** Two replayable computations, each with a business hash that excludes run ids, timestamps and sequence:
+`RULE_CONTENT` = H(rule content hash + sha256 of the exact quoted source text of every cited span) - detects edited rule content *or* edited source
+text; `IMPACT` = H(per account: both rule-set hashes, stored risk result hashes and required amounts, status). Impact replay re-resolves both rule
+sets bitemporally and re-reads the *stored* risk results by id; REGULUS never recomputes margin. Missing inputs => the replayer raises =>
+VERITAS reports `NOT_REPLAYABLE`; the replayer runs inside a rolled-back savepoint and only reads.
+
+**Concurrency (PostgreSQL).** All mutations lock the whole rule key (`_lock_key`, ordered by version) then the row, with `populate_existing`, before
+checking revision/state/overlap: approve, reject, activate, withdraw, revise. `create_rule` locks the key and maps a unique-violation (two first
+creations of a brand-new key, where there is no row to lock) to a clean `REVISION_CONFLICT`. `ingest_document` treats the unique-hash violation as a
+dedupe. `advance_states` locks the SCHEDULED rows so a rule flips once. `activate` refuses a lower version when a higher one is already activated
+(`OUT_OF_ORDER_ACTIVATION`). Each guard has a real-thread regression test that fails when the lock/guard is removed (see test report).
+
+**Impact feasibility (opt-in).** `include_feasibility=true` calls `collateral.optimise` with the HYPOTHETICAL margin result; ATLAS flags the proposal
+hypothetical so it can never be approved or reserved. Missing inventory/deadline/horizon, or an unavailable service, yields an explicit
+`NOT_EVALUATED` with the reason. Compliance is still never invoked for hypothetical rule sets.
+
+**Batch resolve.** `regulatory.resolve_rules_batch(contexts)` returns exactly what N calls of `resolve_rules` return (tested), preparing the in-force
+rule set, static entry parts and normalised parameters once. See `reports/benchmarks/regulatory.json` for measured numbers.
+
 ## 7. Known limitations
 No OCR; no live model; no real regulatory source has been encoded or verified (register in spec §17 is a research baseline only);
 precedence is only as good as the human-approved `precedence_rank`; no legal-interpretation workflow beyond maker/checker;
-REPLAY accuracy cannot be claimed; the DEMO tier has not been benchmarked for this engine; `sum_by` positions rows are
+REPLAY accuracy cannot be claimed; benchmark figures are single-machine, shared-CPU and PostgreSQL-in-Docker only; `sum_by` positions rows are
 accepted only from callers (A5/A3 supply them); condition evaluation lives in A5.

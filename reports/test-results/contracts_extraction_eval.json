@@ -8,7 +8,7 @@
   "held_out_set": "8 documents authored AFTER the hardening with variations it was not designed for: the fairer estimate of current behaviour."
  },
  "reviewer_correction_time_note": "Not measured: no human reviewer study was run.",
- "evaluated_at": "2026-11-25T01:26:42Z",
+ "evaluated_at": "2026-11-25T12:29:48Z",
  "baseline_before_hardening": {
   "documents": {
    "n": 18,

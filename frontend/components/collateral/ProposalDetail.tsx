@@ -1,6 +1,6 @@
 "use client";
-import { MoneyDisplay, ProvenanceBadge, StatusChip } from "@/components/ui";
-import { fmt, reasonText, short, StateChip } from "./shared";
+import { ProvenanceBadge, StatusChip } from "@/components/ui";
+import { fmt, Money, reasonText, short, StateChip } from "./shared";
 import type { Proposal } from "./types";
 
 /** Accessible bar comparison (baseline vs recommended horizon cost) with a text/table alternative alongside. */
@@ -28,7 +28,7 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
   const showSavings = !infeasible && b?.status === "AVAILABLE" && p.objective != null && b.cost != null;
   return (
     <div>
-      <div className="row" style={{ marginBottom: 8 }}>
+      <div className="row" style={{ marginBottom: 8, flexWrap: "wrap" }}>
         <StateChip state={p.state} />
         <StatusChip tone={p.solver_status === "optimal" ? "ok" : p.solver_status === "feasible" ? "warn" : p.solver_status === "infeasible" ? "danger" : "neutral"}>solver: {p.solver_status}</StatusChip>
         {p.hypothetical && <ProvenanceBadge kind="HYPOTHETICAL" />}
@@ -38,11 +38,11 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
       </div>
       <p className="mono faint">proposal {p.proposal_id} · rev {p.revision} · hash {short(p.proposal_hash)} · obligation {p.obligation_id} · horizon {p.horizon_days} d</p>
 
-      <div className="grid c3" style={{ margin: "12px 0" }}>
-        <div className="card metric"><div className="label">Coverage required</div><div className="value"><MoneyDisplay amount={p.required_coverage} currency={cur} signed={false} /></div></div>
-        <div className="card metric"><div className="label">Recommended horizon cost</div><div className="value">{p.objective != null ? <MoneyDisplay amount={p.objective} currency={cur} signed={false} /> : "—"}</div>
+      <div className="grid" style={{ margin: "12px 0", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))" }}>
+        <div className="card metric" style={{ minWidth: 0, overflowWrap: "anywhere" }}><div className="label">Coverage required</div><div className="value"><Money amount={p.required_coverage} currency={cur} signed={false} /></div></div>
+        <div className="card metric" style={{ minWidth: 0, overflowWrap: "anywhere" }}><div className="label">Recommended horizon cost</div><div className="value">{p.objective != null ? <Money amount={p.objective} currency={cur} signed={false} /> : "—"}</div>
           <div className="faint" style={{ fontSize: 12 }}>{p.cost_units}</div></div>
-        <div className="card metric"><div className="label">Residual</div><div className="value">{p.residual != null ? <MoneyDisplay amount={p.residual} currency={cur} signed={false} /> : "—"}</div></div>
+        <div className="card metric" style={{ minWidth: 0, overflowWrap: "anywhere" }}><div className="label">Residual</div><div className="value">{p.residual != null ? <Money amount={p.residual} currency={cur} signed={false} /> : "—"}</div></div>
       </div>
 
       {infeasible && r?.diagnostics && (
@@ -58,7 +58,7 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
         <section className="card" style={{ margin: "12px 0" }} aria-labelledby="cmp">
           <h2 id="cmp">Baseline vs recommended</h2>
           <CostCompare base={b!.cost!} rec={p.objective!} cur={cur} baseName={`Baseline ${b!.policy}`} />
-          <div className="scroll-x"><table><caption className="sr-only">Cost comparison</caption>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Cost comparison</caption>
             <thead><tr><th scope="col">Item</th><th scope="col" className="r">Horizon cost ({cur})</th></tr></thead>
             <tbody>
               <tr><td>Baseline {b!.policy}</td><td className="r num">{fmt(b!.cost)}</td></tr>
@@ -74,7 +74,7 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
       {(p.legs?.length ?? 0) > 0 && (
         <section className="card" style={{ margin: "12px 0" }} aria-labelledby="legs">
           <h2 id="legs">Allocation legs</h2>
-          <div className="scroll-x"><table><caption className="sr-only">Allocation legs with haircut and FX breakdown</caption>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Allocation legs with haircut and FX breakdown</caption>
             <thead><tr><th scope="col">Lot</th><th scope="col">Class</th><th scope="col" className="r">Quantity</th><th scope="col" className="r">Gross value</th>
               <th scope="col" className="r">Valuation factor</th><th scope="col" className="r">FX factor</th><th scope="col" className="r">Effective coverage</th>
               <th scope="col" className="r">Horizon cost</th><th scope="col" className="r">Share</th><th scope="col" className="r">Lag (d)</th></tr></thead>
@@ -89,7 +89,7 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
       {(p.constraints?.length ?? 0) > 0 && (
         <section className="card" style={{ margin: "12px 0" }} aria-labelledby="cons">
           <h2 id="cons">Constraints and slack</h2>
-          <div className="scroll-x"><table><caption className="sr-only">Constraint slacks</caption>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Constraint slacks</caption>
             <thead><tr><th scope="col">Constraint</th><th scope="col" className="r">Limit</th><th scope="col" className="r">Measured</th><th scope="col" className="r">Slack</th><th scope="col">Binding?</th></tr></thead>
             <tbody>{p.constraints!.map(c => (
               <tr key={c.name}><td>{c.name}</td><td className="r num">{fmt(c.limit)}</td><td className="r num">{fmt(c.measured)}</td><td className="r num">{fmt(c.slack)}</td>
@@ -102,6 +102,7 @@ export default function ProposalDetail({ p }: { p: Proposal }) {
         <section className="card" style={{ margin: "12px 0" }} aria-labelledby="solv">
           <h2 id="solv">Solver and independent verification</h2>
           <p className="mono muted">{String((r.solver as Record<string, unknown> | undefined)?.solver ?? "")} {String((r.solver as Record<string, unknown> | undefined)?.highs_version ?? "")} · scipy {String((r.solver as Record<string, unknown> | undefined)?.scipy_version ?? "")} · {r.runtime_s?.toFixed(3)} s · {r.integer_lots ? "MILP (indivisible lots)" : "continuous LP"}{r.mip_gap != null ? ` · gap ${r.mip_gap}` : ""}</p>
+          {r.integer_lots && <p className="chip warn" role="note" style={{ borderRadius: 8 }}><span aria-hidden>!</span> Indivisible lots: quantities are whole blocks (mixed-integer model). {p.solver_status === "optimal" ? "The solver proved optimality within its gap tolerance." : "Optimality is NOT claimed (time limit, or a coverage repair was applied) — the allocation was fully re-verified but may cost more than the true optimum."} No shadow price is defined for integer models.</p>}
           {r.rounding && <p className="muted">Rounding to 6 dp: LP objective {fmt(r.rounding.lp_objective)} → rounded {fmt(r.rounding.rounded_cost)} (gap {r.rounding.absolute_gap}). {r.repair_applied ? "A coverage repair was applied, so optimality is not claimed." : ""}</p>}
           {r.verification && (
             <details open={!r.verification.ok}>

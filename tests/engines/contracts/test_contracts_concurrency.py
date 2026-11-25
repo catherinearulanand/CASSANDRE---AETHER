@@ -99,14 +99,40 @@ def test_concurrent_propose_freeze_creates_single_pending_approval(db, tenant, m
 
 
 def test_concurrent_register_same_trade_is_idempotent_no_raw_error(db, tenant, maker, seeded):
-    res = race(lambda s, i: S.register_trade(s, principal(tenant, f"mk{i}", "maker"), "c", "TRD-RACE-1", "MA-MER-NWD-001", "NS-MER-NWD-001"))
-    no_raw(res)
-    oks = [r[1] for r in res if r[0] == "ok"]
-    assert oks and len({(o["status"], o["netting_set_id"]) for o in oks}) == 1, res
-    assert all(r[1] == "MAPPING_CONFLICT" for r in res if r[0] == "err"), res
-    n = db.execute(select(func.count()).select_from(ConNettingMembership).where(ConNettingMembership.tenant_id == tenant,
-                                                                                ConNettingMembership.trade_id == "TRD-RACE-1")).scalar_one()
-    assert n == 1
+    """Deterministic collision: a before_flush hook parks every thread just before it INSERTs the mapping, so all of them have
+    already passed their 'does it exist?' read. With the agreement lock, only one thread gets there at a time (the barrier times
+    out harmlessly); without it every thread collides on the unique (tenant, trade) index."""
+    import threading as th
+
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+    state = {"barrier": None}
+
+    def park(session, ctx, instances):
+        b = state["barrier"]
+        if b is not None and session.get_bind().dialect.name == "postgresql" and any(isinstance(o, ConNettingMembership) for o in session.new):
+            try:
+                b.wait(timeout=1.0)
+            except th.BrokenBarrierError:
+                pass
+
+    event.listen(Session, "before_flush", park)
+    try:
+        for rnd in range(3):
+            tid = f"TRD-RACE-{rnd}"
+            state["barrier"] = th.Barrier(N)
+            res = race(lambda s, i: S.register_trade(s, principal(tenant, f"mk{i}", "maker"), "c", tid, "MA-MER-NWD-001", "NS-MER-NWD-001"))
+            no_raw(res)
+            oks = [r[1] for r in res if r[0] == "ok"]
+            assert oks and len({(o["status"], o["netting_set_id"]) for o in oks}) == 1, res
+            assert all(r[1] == "MAPPING_CONFLICT" for r in res if r[0] == "err"), res
+            n = db.execute(select(func.count()).select_from(ConNettingMembership).where(
+                ConNettingMembership.tenant_id == tenant, ConNettingMembership.trade_id == tid)).scalar_one()
+            db.rollback()  # end this session's transaction: SQLite takes the write lock at BEGIN and would block the next round
+            assert n == 1
+    finally:
+        event.remove(Session, "before_flush", park)
+        state["barrier"] = None
 
 
 def test_concurrent_fact_snapshot_same_id_exactly_one_wins(db, tenant, maker):
@@ -116,11 +142,16 @@ def test_concurrent_fact_snapshot_same_id_exactly_one_wins(db, tenant, maker):
     assert [r[0] for r in res].count("ok") == 1 and all(r[1] == "FACT_SNAPSHOT_EXISTS" for r in res if r[0] == "err"), res
 
 
-def test_concurrent_resolve_same_inputs_all_resolve_same_hash(db, tenant, seeded):
-    res = race(lambda s, i: S.resolve_terms(s, tenant, "NS-MER-NWD-001", AS_OF, datetime.now(UTC)))
-    no_raw(res)
-    assert all(r[0] == "ok" and r[1]["status"] == "RESOLVED" for r in res), res
-    assert len({r[1]["terms_hash"] for r in res}) == 1
+def test_concurrent_resolve_same_inputs_all_resolve_same_hash(db):
+    import uuid
+    for rnd in range(4):  # fresh tenant per round => a NEW resolution row each time (an existing row hides the insert race)
+        tenant = f"ct-{uuid.uuid4().hex[:10]}"
+        F.seed_fixtures(db, tenant)
+        db.commit()
+        res = race(lambda s, i: S.resolve_terms(s, tenant, "NS-MER-NWD-001", AS_OF, datetime.now(UTC)))
+        no_raw(res)
+        assert all(r[0] == "ok" and r[1]["status"] == "RESOLVED" for r in res), res
+        assert len({r[1]["terms_hash"] for r in res}) == 1
 
 
 def test_concurrent_amendment_filing_serialises(db, tenant, maker, checker):

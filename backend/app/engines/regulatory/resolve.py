@@ -76,7 +76,7 @@ def _prepare(db, tenant_id: str, as_of: datetime, known_at: datetime | None, hyp
     for key in sorted(chosen):
         r = chosen[key]
         static[key] = (r, r.rule_id in hyp_ids, _entry(r, r.rule_id in hyp_ids, None), bool(r.additive_stricter),
-                       sorted(dsl.node_dependencies(r.scope, r.parameters)))
+                       sorted(dsl.node_dependencies(r.scope, r.parameters)), dsl.normalise_params(r.parameters)[0])
     return {"hyp": bool(hyp_ids), "static": static, "pinned": set()}
 
 
@@ -84,8 +84,8 @@ def _resolve_one(db, tenant_id: str, prep: dict, context: dict, as_of: datetime,
     ctx = dict(context)
     ctx.setdefault("as_of_date", as_of.date().isoformat())
     applicable, excluded, unknown = [], [], []
-    for key, (r, hyp, base, _add, deps) in prep["static"].items():
-        s, trace = dsl.evaluate(r.scope, ctx, r.parameters)
+    for key, (r, hyp, base, _add, deps, norm) in prep["static"].items():
+        s, trace = dsl.evaluate(r.scope, ctx, r.parameters, norm)
         if r.effective_from > as_of:  # hypothetical future revision evaluated at as_of: carry the date explicitly
             trace.append({"depth": 0, "op": "NOTE", "result": "TRUE", "detail": f"hypothetical effective_from {r.effective_from.isoformat()} is after as_of; applied as counterfactual"})
         e = dict(base) | {"trace": trace}
@@ -95,7 +95,7 @@ def _resolve_one(db, tenant_id: str, prep: dict, context: dict, as_of: datetime,
             excluded.append(e | {"reason": "SCOPE_NOT_MATCHED"})
         else:
             unknown.append(e | {"reason": "SCOPE_UNKNOWN_MISSING_CONTEXT", "missing_context": [f for f in deps if ctx.get(f) is None]})
-    additive = {base["rule_id"]: add for (_r, _h, base, add, _d) in prep["static"].values()}
+    additive = {base["rule_id"]: add for (_r, _h, base, add, _d, _n) in prep["static"].values()}
     conflicts, final = [], []
     groups: dict[str, list[dict]] = {}
     for e in applicable:

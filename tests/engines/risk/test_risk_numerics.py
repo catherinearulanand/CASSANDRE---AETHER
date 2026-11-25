@@ -7,7 +7,7 @@ from datetime import date
 from decimal import Decimal, localcontext
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import assume, given, settings
 from hypothesis import strategies as st
 
 from app.core import services
@@ -54,17 +54,21 @@ def test_negative_rate_curve_is_valid_and_prices_to_the_closed_form():
     df1 = dexp("0.005")
     assert df1 > 1
     n, k = D(1_000_000), D("0.02")
-    expected = n * (1 - df1) - n * k * (D(365) / D(360)) * df1   # PAY_FIXED: PV_float - PV_fixed, single annual coupon, disc = proj
+    with localcontext() as c:
+        c.prec = PREC  # oracle arithmetic at 60 digits (the default 28-digit context was the test's own error source)
+        expected = n * (1 - df1) - n * k * (D(365) / D(360)) * df1   # PAY_FIXED: PV_float - PV_fixed, single annual coupon, disc = proj
     got = value_irs(irs(), md_of(snap["curves"]), VAL, "T1")
     assert abs(got - expected) < D("1e-25"), (got, expected)
-    assert got < 0 and value_irs(irs(pay_receive="RECEIVE_FIXED"), md_of(snap["curves"]), VAL, "T1") == -got   # sign symmetry
+    assert got < 0 and value_irs(irs(pay_receive="RECEIVE_FIXED"), md_of(snap["curves"]), VAL, "T1") == got.copy_negate()   # sign symmetry
 
 
 def test_negative_fixed_rate_trade_is_accepted_and_priced():
     t = irs(fixed_rate="-0.0025")
     assert svc.validate_trade(t) == []
     df1 = dexp("0.005")
-    expected = D(1_000_000) * (1 - df1) - D(1_000_000) * D("-0.0025") * (D(365) / D(360)) * df1
+    with localcontext() as c:
+        c.prec = PREC
+        expected = D(1_000_000) * (1 - df1) - D(1_000_000) * D("-0.0025") * (D(365) / D(360)) * df1
     assert abs(value_irs(t, md_of({"C": flat_curve("USD", "-0.005")}), VAL, "T1") - expected) < D("1e-25")
 
 
@@ -74,7 +78,9 @@ def test_fx_forward_with_negative_base_rate_hand_value():
     s, k, n = D("1.10"), D("1.12"), D(2_000_000)
     md = md_of({"EUR": flat_curve("EUR", "-0.005"), "USD": flat_curve("USD", "0.03")}, {"EURUSD": "1.10"})
     trade = {"base_ccy": "EUR", "quote_ccy": "USD", "notional_base": "2000000", "strike": "1.12", "maturity": "2027-02-17", "curve_base": "EUR", "curve_quote": "USD", "side": "BUY"}
-    expected = n * (s * dexp(D("0.005") * t_years) - k * dexp(-D("0.03") * t_years))
+    with localcontext() as c:
+        c.prec = PREC
+        expected = n * (s * dexp(D("0.005") * t_years) - k * dexp(-D("0.03") * t_years))
     assert abs(value_fxf(trade, md, VAL) - expected) < D("1e-22")
 
 
@@ -236,9 +242,11 @@ def two_ccy(rb, rq):
 def test_property_buy_sell_antisymmetry_and_closed_form(s, k, n, rb, rq):
     md = md_of(two_ccy(rb, rq), {"EURUSD": str(s)})
     buy, sell = value_fxf(TR("BUY", "EUR", "USD", n, k, "EUR", "USD"), md, VAL), value_fxf(TR("SELL", "EUR", "USD", n, k, "EUR", "USD"), md, VAL)
-    assert buy == -sell
+    assert buy == sell.copy_negate()  # copy_negate is exact; unary minus would round to the 28-digit default context
     t = D((date(2027, 2, 17) - VAL).days) / D(365)
-    expected = D(n) * (s * dexp(-rb * t) - k * dexp(-rq * t))
+    with localcontext() as c:
+        c.prec = PREC
+        expected = D(n) * (s * dexp(-rb * t) - k * dexp(-rq * t))
     assert abs(buy - expected) <= D("1e-20") * max(D(1), abs(expected))
 
 
@@ -282,29 +290,55 @@ def test_fx_reciprocal_tolerance_boundary():
 
 
 # ------------------------------------------------------------------------------------------------ independent Decimal reconciliation of float BSM
-PI = D("3.14159265358979323846264338327950288419716939937510582097494459230781640628620899")
+def _pi(digits):
+    """pi to `digits` places by Machin's formula (the former 80-digit literal capped the oracle's accuracy at ~1e-80 in the far tail)."""
+    with localcontext() as c:
+        c.prec = digits + 10
+
+        def atan_inv(n):
+            n = D(n)
+            term = 1 / n
+            tot, k, n2 = term, 1, n * n
+            while abs(term) > D(10) ** -(digits + 8):
+                term /= n2
+                k += 2
+                tot += term / k if (k // 2) % 2 == 0 else -term / k
+            return tot
+        return 4 * (4 * atan_inv(5) - atan_inv(239))
+
+
+PI = _pi(900)
 
 
 def d_erf(z):
+    """Taylor series with ADAPTIVE precision. Alternating terms reach ~e^(z^2) while the answer's distance from +-1 is ~e^(-z^2), so the
+    digits needed grow like 2*0.434*z^2. (First two versions of this oracle used fixed 90 / 300 digits and were themselves wrong in the far
+    tail -- they returned -5e-9 where the truth is 1e-242; the product was right, the test's reference was not.)"""
+    z = D(z)
+    prec = 80 + int(0.9 * float(z * z))
     with localcontext() as c:
-        c.prec = 90
-        z = D(z)
-        z2, term, tot = z * z, z, z
-        for n in range(1, 450):
+        c.prec = prec
+        z2, term, tot, n = z * z, z, z, 0
+        eps = D(10) ** (-prec)
+        while True:
+            n += 1
             term = -term * z2 / n
-            tot += term / (2 * n + 1)
+            add = term / (2 * n + 1)
+            tot += add
+            if abs(add) < eps and n > 2 * float(z2):
+                break
         return 2 / PI.sqrt() * tot
 
 
 def d_ncdf(x):
     with localcontext() as c:
-        c.prec = 90
+        c.prec = 700
         return (1 + d_erf(D(x) / D(2).sqrt())) / 2
 
 
 def d_bsm(kind, s, k, t, r, q, vol):
     with localcontext() as c:
-        c.prec = 90
+        c.prec = 700
         s, k, t, r, q, vol = (D(x) for x in (s, k, t, r, q, vol))
         d1 = ((s / k).ln() + (r - q + vol * vol / 2) * t) / (vol * t.sqrt())
         d2 = d1 - vol * t.sqrt()
@@ -331,6 +365,8 @@ VP = st.integers(500, 9000).map(lambda i: D(i) / 10_000)
 @settings(max_examples=80, deadline=None)
 @given(s=SP, k=KP, t=TP, r=RP, q=QP, vol=VP, kind=st.sampled_from(["CALL", "PUT"]))
 def test_property_float_bsm_reconciles_to_independent_decimal_within_1e10(s, k, t, r, q, vol, kind):
+    d1 = (math.log(float(s) / float(k)) + (float(r) - float(q) + 0.5 * float(vol) ** 2) * float(t)) / (float(vol) * math.sqrt(float(t)))
+    assume(abs(d1) < 14)  # the Decimal oracle needs ~0.9*d1^2/2 extra digits; beyond |d1|=14 both sides are < 1e-40 and cost explodes
     fp, fd = etd.bs_price_delta(kind, float(s), float(k), float(t), float(r), float(q), float(vol))
     dp, dd = d_bsm(kind, float(s), float(k), float(t), float(r), float(q), float(vol))   # oracle fed the exact same binary inputs
     assert abs(D(fp) - dp) <= D("1e-10") * max(D(1), D(float(s))), (kind, s, k, t, r, q, vol, fp, dp)
@@ -364,3 +400,13 @@ def test_option_position_pnl_reconciles_to_decimal_within_quantisation_and_futur
     fp, fdelta = etd.position_value(fut, D(40), md, VAL, D("0.03"))
     assert fp == D(40) * D(25) * D(24000) * D("0.03") == D("720000") and fdelta == 1.0      # futures path is pure Decimal: exact
     assert math.isfinite(float(pnl))
+
+
+@pytest.mark.parametrize("s,k,t,q,vol", [("50", "56.5", "0.00547945205479452", "0.0453", "0.05"), ("50", "53.42", "0.00547945205479452", "0.0456", "0.05")])
+def test_deep_otm_tail_is_accurate_not_cancelled_to_zero(s, k, t, q, vol):
+    """Regression for 0.5*(1+erf(x/sqrt2)), which cancels to exactly 0.0 for x < -8 (delta error ~1e-12). The engine now uses erfc."""
+    fp, fd = etd.bs_price_delta("CALL", float(s), float(k), float(t), 0.0, float(q), float(vol))
+    dp, dd = d_bsm("CALL", float(s), float(k), float(t), 0.0, float(q), float(vol))
+    assert fd > 0                                                         # the old formula returned exactly 0.0 here
+    assert abs(D(fd) / dd - 1) < D("1e-9")                                # delta keeps RELATIVE accuracy in the tail
+    assert abs(D(fp) - dp) < D("1e-12")                                   # price (a difference of two tiny terms): absolute accuracy only

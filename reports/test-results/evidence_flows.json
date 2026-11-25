@@ -1,0 +1,498 @@
+{
+ "results": [
+  {
+   "check": "auditor: page h1 and four tabs",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "auditor: sees FULL detail level",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "auditor: chain verified against signed checkpoint from the UI",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "audit filter engine=risk returns only risk events",
+   "ok": true,
+   "detail": "{'risk'}"
+  },
+  {
+   "check": "audit filter action=CONTROL_EVALUATED returns only that action",
+   "ok": true,
+   "detail": "{'CONTROL_EVALUATED'}"
+  },
+  {
+   "check": "audit filter by entity id finds the margin result event",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "event detail drawer shows hashes and actor (full detail)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "deep link /evidence?seq=N opens that event's technical details",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01: INCOMPLETE is stated explicitly",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 shows stage 'Approved rule / terms'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 shows stage 'Pinned snapshot'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 shows stage 'Margin result'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 shows stage 'Allocation proposal'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 shows stage 'Control / case'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 lists missing stage Approval explicitly",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 labels seed-time ancestors as recorded earlier",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "lineage G01 orders steps (>=8 list items)",
+   "ok": true,
+   "detail": "19"
+  },
+  {
+   "check": "lineage of a bare run shows many explicit missing stages",
+   "ok": true,
+   "detail": "9"
+  },
+  {
+   "check": "deep link ?entity=<margin result id> resolves to the decision lineage",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "unknown entity id shows an explicit not-found state",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "tenant-A auditor cannot open tenant-B run: NOT_FOUND, no data",
+   "ok": true,
+   "detail": "NOT_FOUND: Run not found\ncorrelation_id e81ddf41-228d-4d33-a9c7-1944e163e522"
+  },
+  {
+   "check": "replay of G01 run reports MATCH for deterministic engine events",
+   "ok": true,
+   "detail": "ration (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate export for selected run\nAlteration\nNo change (control)\nModify an event\nDrop an event\nTruncate chain tail\nVerify with the wrong key\nRun verifier on copy"
+  },
+  {
+   "check": "replay table lists replayed events with engine",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "replay is read-only: chain head advanced by exactly 1 (its own REPLAY_COMPLETED event)",
+   "ok": true,
+   "detail": "(156, 157)"
+  },
+  {
+   "check": "tamper demo [none] -> verified",
+   "ok": true,
+   "detail": " (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate another export\nAlteration\nNo change (control)\nModify an e"
+  },
+  {
+   "check": "tamper demo [modify_event] -> verification FAILED",
+   "ok": true,
+   "detail": " (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate another export\nAlteration\nNo change (control)\nModify an e"
+  },
+  {
+   "check": "tamper demo [drop_event] -> verification FAILED",
+   "ok": true,
+   "detail": " (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate another export\nAlteration\nNo change (control)\nModify an e"
+  },
+  {
+   "check": "tamper demo [truncate_chain_skeleton] -> verification FAILED",
+   "ok": true,
+   "detail": " (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate another export\nAlteration\nNo change (control)\nModify an e"
+  },
+  {
+   "check": "tamper demo [wrong_trusted_key] -> verification FAILED",
+   "ok": true,
+   "detail": " (copied bundle only)\n\nCreates an export, then alters an in-memory copy and runs the verifier. Operational evidence is never modified.\n\nCreate another export\nAlteration\nNo change (control)\nModify an e"
+  },
+  {
+   "check": "tamper demo never modified operational evidence (head only moved by the export bookkeeping)",
+   "ok": true,
+   "detail": "(157, 158)"
+  },
+  {
+   "check": "export preview says FULL content for an auditor",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "export preview states it is an internal evidence pack, not a regulatory submission",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "downloaded bundle verifies with the offline verifier (exit 0)",
+   "ok": true,
+   "detail": "VERIFIED\nevents=15 redacted_events=0 checkpoint_seq=158 key_id=75cabc686cf50fb0\n"
+  },
+  {
+   "check": "TAMPERED copy of the downloaded bundle fails the offline verifier (non-zero exit)",
+   "ok": true,
+   "detail": "Traceback (most recent call last):\n  File \"<frozen runpy>\", line 198, in _run_module_as_main\n  File \"<frozen runpy>\", line 88, in _run_code\n  File \"D:\\CASSANDRE AETHER\\tools\\verify_bundle\\__main__.py\", line 45, in <module>\n    sys.exit(main())\n             ~~~~^^\n  File \"D:\\CASSANDRE AETHER\\tools\\verify_bundle\\__main__.py\", line 26, in main\n    res = verify_bundle(a.bundle, key_bytes)\n  File \"D:\\C"
+  },
+  {
+   "check": "auditor: no unexpected HTTP errors (only pre-login 401 and the two deliberate 404 probes)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "auditor: no uncaught JS exceptions",
+   "ok": true,
+   "detail": "['Failed to load resource: the server responded with a status of 401 (Unauthorized)', 'Failed to load resource: the server responded with a status of 404 (Not Found)', 'Failed to load resource: the server responded with a status of 404 (Not Found)']"
+  },
+  {
+   "check": "tenant_admin export is forced REDACTED (cannot obtain full event content)",
+   "ok": true,
+   "detail": "Evidence & Audit (VERITAS)\n\nEvery consequential action is recorded in a tenant-scoped, hash-chained log. Integrity is proven only against signed checkpoints held outside the database; a local key is n"
+  },
+  {
+   "check": "viewer: audit explorer is METADATA ONLY",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "viewer: chain verification is FORBIDDEN (explicit error with correlation id)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "viewer: event details hide actor/rationale",
+   "ok": true,
+   "detail": "Event 160 \u00b7 technical details\nClose\nevent_id\n99a3e49e-d46c-421e-a74c-82d01fce4af9\nservice\naether-evidence/1.0\nsource mode\nREPLAY\neffective_at\n2026-11-25T11:34:34.959533+00:00\nrecorded_at\n2026-11-25T11"
+  },
+  {
+   "check": "viewer: exports tab shows an error state, no export list",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "tenant-B auditor searching tenant-A's entity id gets no events (no leakage)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "keyboard: ArrowRight moves to the next tab and selects it",
+   "ok": true,
+   "detail": "Decision lineage"
+  },
+  {
+   "check": "keyboard: ArrowLeft wraps to the last tab",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "keyboard: Tab reaches the first control in the panel and shows a visible focus outline",
+   "ok": true,
+   "detail": "('Verify chain against signed checkpoints', ['solid', '2px'])"
+  },
+  {
+   "check": "axe-core [audit]: no serious/critical WCAG A/AA violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "contrast [audit]: all sampled text meets WCAG AA (221 nodes)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "labels [audit]: every control labelled, no unnamed buttons/links, single h1, lang set",
+   "ok": true,
+   "detail": "{\"unlabelled_controls\": [], \"unnamed_buttons_links\": [], \"h1\": 1, \"lang\": \"en\", \"live_regions\": 1, \"tables_without_caption_or_heading\": 0}"
+  },
+  {
+   "check": "axe-core [lineage]: no serious/critical WCAG A/AA violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "contrast [lineage]: all sampled text meets WCAG AA (146 nodes)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "labels [lineage]: every control labelled, no unnamed buttons/links, single h1, lang set",
+   "ok": true,
+   "detail": "{\"unlabelled_controls\": [], \"unnamed_buttons_links\": [], \"h1\": 1, \"lang\": \"en\", \"live_regions\": 1, \"tables_without_caption_or_heading\": 0}"
+  },
+  {
+   "check": "axe-core [lab]: no serious/critical WCAG A/AA violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "contrast [lab]: all sampled text meets WCAG AA (43 nodes)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "labels [lab]: every control labelled, no unnamed buttons/links, single h1, lang set",
+   "ok": true,
+   "detail": "{\"unlabelled_controls\": [], \"unnamed_buttons_links\": [], \"h1\": 1, \"lang\": \"en\", \"live_regions\": 3, \"tables_without_caption_or_heading\": 0}"
+  },
+  {
+   "check": "axe-core [exports]: no serious/critical WCAG A/AA violations",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "contrast [exports]: all sampled text meets WCAG AA (75 nodes)",
+   "ok": true,
+   "detail": "[]"
+  },
+  {
+   "check": "labels [exports]: every control labelled, no unnamed buttons/links, single h1, lang set",
+   "ok": true,
+   "detail": "{\"unlabelled_controls\": [], \"unnamed_buttons_links\": [], \"h1\": 1, \"lang\": \"en\", \"live_regions\": 0, \"tables_without_caption_or_heading\": 0}"
+  },
+  {
+   "check": "responsive 1440px [audit]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1440px [lineage]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1440px [lab]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1440px [exports]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1280px [audit]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1280px [lineage]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1280px [lab]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 1280px [exports]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 768px [audit]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 768px [lineage]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 768px [lab]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 768px [exports]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 390px [audit]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 390px [lineage]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 390px [lab]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "responsive 390px [exports]: no horizontal page overflow",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "drill: tenant-B chain tail truncated at DB level",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "UI: truncation detected against the trusted signed checkpoint",
+   "ok": true,
+   "detail": "Evidence & Audit (VERITAS)\n\nEvery consequential action is recorded in a tenant-scoped, hash-chained log. Integrity is proven only against signed checkpoints held outside the database; a local key is not an HSM.\n\nAudit explorer\nDecision lineage\nReplay & integrity lab\nEvidence exports\nChain verificati"
+  },
+  {
+   "check": "integrity dashboard reports FAILED for the truncated tenant",
+   "ok": true,
+   "detail": ""
+  }
+ ],
+ "findings": {
+  "axe": {
+   "audit": {
+    "violations": [
+     {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": 1,
+      "help": "All page content should be contained by landmarks",
+      "sample": "<div class=\"banner\" role=\"note\">SYNTHETIC DATA \u00b7 SIMULATION ONLY \u2014 decision support; no trade, settlement or regulatory "
+     }
+    ],
+    "passes": 49
+   },
+   "lineage": {
+    "violations": [
+     {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": 1,
+      "help": "All page content should be contained by landmarks",
+      "sample": "<div class=\"banner\" role=\"note\">SYNTHETIC DATA \u00b7 SIMULATION ONLY \u2014 decision support; no trade, settlement or regulatory "
+     }
+    ],
+    "passes": 44
+   },
+   "lab": {
+    "violations": [
+     {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": 1,
+      "help": "All page content should be contained by landmarks",
+      "sample": "<div class=\"banner\" role=\"note\">SYNTHETIC DATA \u00b7 SIMULATION ONLY \u2014 decision support; no trade, settlement or regulatory "
+     }
+    ],
+    "passes": 41
+   },
+   "exports": {
+    "violations": [
+     {
+      "id": "region",
+      "impact": "moderate",
+      "nodes": 1,
+      "help": "All page content should be contained by landmarks",
+      "sample": "<div class=\"banner\" role=\"note\">SYNTHETIC DATA \u00b7 SIMULATION ONLY \u2014 decision support; no trade, settlement or regulatory "
+     }
+    ],
+    "passes": 46
+   }
+  },
+  "contrast_and_labels": {
+   "audit": {
+    "contrast": {
+     "checked": 221,
+     "below_aa": [],
+     "below_count": 0
+    },
+    "labels": {
+     "unlabelled_controls": [],
+     "unnamed_buttons_links": [],
+     "h1": 1,
+     "lang": "en",
+     "live_regions": 1,
+     "tables_without_caption_or_heading": 0
+    }
+   },
+   "lineage": {
+    "contrast": {
+     "checked": 146,
+     "below_aa": [],
+     "below_count": 0
+    },
+    "labels": {
+     "unlabelled_controls": [],
+     "unnamed_buttons_links": [],
+     "h1": 1,
+     "lang": "en",
+     "live_regions": 1,
+     "tables_without_caption_or_heading": 0
+    }
+   },
+   "lab": {
+    "contrast": {
+     "checked": 43,
+     "below_aa": [],
+     "below_count": 0
+    },
+    "labels": {
+     "unlabelled_controls": [],
+     "unnamed_buttons_links": [],
+     "h1": 1,
+     "lang": "en",
+     "live_regions": 3,
+     "tables_without_caption_or_heading": 0
+    }
+   },
+   "exports": {
+    "contrast": {
+     "checked": 75,
+     "below_aa": [],
+     "below_count": 0
+    },
+    "labels": {
+     "unlabelled_controls": [],
+     "unnamed_buttons_links": [],
+     "h1": 1,
+     "lang": "en",
+     "live_regions": 0,
+     "tables_without_caption_or_heading": 0
+    }
+   }
+  }
+ }
+}

@@ -15,8 +15,13 @@ from app.core.events import emit
 from app.core.money import dstr, to_decimal
 from app.db.base import lock_for_update, new_id
 from app.engines.compliance import dsl
-from app.engines.compliance.controls import WAIVABLE_AUTHORITY
-from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpWaiver
+from app.engines.compliance.models import (
+    CmpCase,
+    CmpCaseEvent,
+    CmpControl,
+    CmpEvaluation,
+    CmpWaiver,
+)
 
 SLA_HOURS = {"CRITICAL": 4, "HIGH": 24, "MEDIUM": 72, "LOW": 120}
 SEV_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
@@ -465,9 +470,9 @@ def open_or_update_case(session, tenant_id: str, ev: CmpEvaluation, actor: dict,
     if created_case:
         add_case_event(session, tenant_id, c.case_id, "OPENED", actor["id"], to="OPEN", as_of=ev.as_of,
                        data={"evaluation_id": ev.evaluation_id, "status": ev.status, "gap": ev.gap, "unit": ev.unit})
-        _ev(session, tenant_id, actor, "CASE_OPENED", "case", c.case_id, c.revision, ev.correlation_id,
+        _ev(session, tenant_id, actor, "CASE_OPENED", "cmp_case", c.case_id, c.revision, ev.correlation_id,
             {"control_key": ev.control_key, "subject_id": ev.subject_id, "status": ev.status, "gap": ev.gap, "unit": ev.unit,
-             "evaluation_id": ev.evaluation_id, "parents": [{"entity_type": "control_evaluation", "entity_id": ev.evaluation_id}]},
+             "evaluation_id": ev.evaluation_id, "parents": [{"entity_type": "cmp_evaluation", "entity_id": ev.evaluation_id}]},
             effective_at=ev.as_of, inputs=[ev.facts_hash])
         emit(session, event_type="CaseOpened", tenant_id=tenant_id, correlation_id=ev.correlation_id, aggregate_id=c.case_id,
              actor_id=actor["id"], actor_type=actor["type"], payload={"control_key": ev.control_key, "subject_id": ev.subject_id},
@@ -493,9 +498,9 @@ def open_or_update_case(session, tenant_id: str, ev: CmpEvaluation, actor: dict,
                            data={"evaluation_id": ev.evaluation_id, "count": c.occurrence_count})
         c.revision += 1
         c.updated_at = datetime.now(UTC)
-        _ev(session, tenant_id, actor, "CASE_UPDATED", "case", c.case_id, c.revision, ev.correlation_id,
+        _ev(session, tenant_id, actor, "CASE_UPDATED", "cmp_case", c.case_id, c.revision, ev.correlation_id,
             {"occurrence_count": c.occurrence_count, "state": c.state, "evaluation_id": ev.evaluation_id,
-             "parents": [{"entity_type": "control_evaluation", "entity_id": ev.evaluation_id}]}, effective_at=ev.as_of)
+             "parents": [{"entity_type": "cmp_evaluation", "entity_id": ev.evaluation_id}]}, effective_at=ev.as_of)
         emit(session, event_type="CaseUpdated", tenant_id=tenant_id, correlation_id=ev.correlation_id, aggregate_id=c.case_id,
              aggregate_revision=c.revision, actor_id=actor["id"], actor_type=actor["type"], payload={"state": c.state}, effective_at=ev.as_of)
     ev.case_id = c.case_id
@@ -513,12 +518,12 @@ def outcome_hash(res: dict) -> str:
     return content_hash({k: res.get(k) for k in ("status", "reasons", "measured", "limit", "gap", "unit")})
 
 
-def _parents(ev: "CmpEvaluation", rstate: dict) -> list[dict]:
+def _parents(ev: CmpEvaluation, rstate: dict) -> list[dict]:
     out = []
     if ev.margin_result_id:
         out.append({"entity_type": "risk_result", "entity_id": ev.margin_result_id})
     if ev.allocation_id:
-        out.append({"entity_type": "allocation_proposal", "entity_id": ev.allocation_id})
+        out.append({"entity_type": "col_proposal", "entity_id": ev.allocation_id})
     if rstate.get("rule_id"):
         out.append({"entity_type": "reg_rule", "entity_id": rstate["rule_id"]})
     return out
@@ -561,7 +566,7 @@ def run_control(session, tenant_id, c: CmpControl, ctx, facts, prov, input_reaso
             raise
         return won, False
     oh = outcome_hash(res)
-    _ev(session, tenant_id, actor, "CONTROL_EVALUATED", "control_evaluation", ev.evaluation_id, 1, cid,
+    _ev(session, tenant_id, actor, "CONTROL_EVALUATED", "cmp_evaluation", ev.evaluation_id, 1, cid,
         {"control_key": c.control_key, "rule_version": c.rule_version, "subject_id": ev.subject_id, "status": ev.status,
          "gap": ev.gap, "unit": ev.unit, "waiver_id": ev.waiver_id, "recheck": is_recheck, "parents": _parents(ev, rstate),
          "hypothetical": bool(facts.get("hypothetical")),

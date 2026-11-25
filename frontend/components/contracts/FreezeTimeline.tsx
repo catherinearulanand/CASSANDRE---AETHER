@@ -80,7 +80,7 @@ export default function FreezeTimeline({ pkg, terms, reload }: { pkg: PkgDetail;
               {v.required_facts.length > 0 && <div className="muted">Needs external facts: <span className="mono">{v.required_facts.join(", ")}</span></div>}
             </li>))}</ol>}
         <h3>Documents</h3>
-        <div className="scroll-x"><table><thead><tr><th>Kind</th><th>Reference</th><th>Effective</th><th>Rank</th><th>Extraction</th><th>Original SHA-256</th></tr></thead>
+        <div className="scroll-x" role="region" tabIndex={0} aria-label="Agreement documents (scrollable)"><table><thead><tr><th>Kind</th><th>Reference</th><th>Effective</th><th>Rank</th><th>Extraction</th><th>Original SHA-256</th></tr></thead>
           <tbody>{pkg.document_list.map(d => <tr key={d.doc_id}><td>{d.kind}</td><td className="mono">{d.doc_ref}</td><td className="mono">{d.effective_from.slice(0, 10)}</td>
             <td className="num">{d.rank}</td><td>{d.extracted_mode ?? <StatusChip tone="info">pending</StatusChip>}</td><td className="mono">{d.sha256.slice(0, 16)}…</td></tr>)}</tbody></table></div>
         <p className="faint">Hierarchy: higher rank wins when both are effective (Master 1 &lt; Schedule 2 &lt; CSA 3 &lt; Confirmation 4 &lt; Amendment 5); equal rank → later effective date; equal everything but different values → CONFLICT (blocked, never guessed).</p>

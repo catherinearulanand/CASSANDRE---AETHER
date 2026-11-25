@@ -4,15 +4,16 @@ from __future__ import annotations
 from datetime import timedelta
 
 import numpy as np
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 
-from app.core.errors import Blocked, Conflict, NotFound
+from app.core.errors import Conflict, NotFound
 from app.core.events import emit
 from app.db.base import lock_for_update, new_id, utcnow
 from app.engines.compliance import engine as E
 from app.engines.compliance import surveillance as S
 from app.engines.compliance.models import CmpCase, CmpJob, CmpModelVersion, CmpScore
+
 
 def _fs(o):
     """Floats are analytics-only; the hashed evidence record carries them as fixed-precision strings."""
@@ -73,7 +74,7 @@ def train_and_persist(session, tenant_id: str, actor: dict, seed: int = 42, n_ac
             if fl and part == "holdout":
                 flagged_by_acct.setdefault(int(ds.account_idx[i]), []).append(int(i))
     session.flush()
-    E._ev(session, tenant_id, actor, "SURVEILLANCE_MODEL_TRAINED", "model", mv.model_id, ver, cid,
+    E._ev(session, tenant_id, actor, "SURVEILLANCE_MODEL_TRAINED", "cmp_model", mv.model_id, ver, cid,
           _fs({"seed": seed, "threshold": float(th), "training_data_hash": res["training_data_hash"], "holdout": res["primary"]["holdout"]}),
           inputs=[res["training_data_hash"]], effective_at=S.obs_date(int(ds.day.max())))
     cases = []
@@ -93,7 +94,7 @@ def train_and_persist(session, tenant_id: str, actor: dict, seed: int = 42, n_ac
         session.flush()
         E.add_case_event(session, tenant_id, c.case_id, "OPENED", actor["id"], to="OPEN", as_of=as_of,
                          comment=DISCLAIMER, data={"model_id": mv.model_id, "max_score": float(max(score[i] for i in idxs))})
-        E._ev(session, tenant_id, actor, "CASE_OPENED", "case", c.case_id, 1, cid,
+        E._ev(session, tenant_id, actor, "CASE_OPENED", "cmp_case", c.case_id, 1, cid,
               {"kind": "ANOMALY_INVESTIGATION", "model_id": mv.model_id, "subject_id": acct, "observations": len(idxs)}, effective_at=as_of)
         emit(session, event_type="CaseOpened", tenant_id=tenant_id, correlation_id=cid, aggregate_id=c.case_id, actor_id=actor["id"],
              actor_type=actor["type"], payload={"kind": "ANOMALY_INVESTIGATION"}, effective_at=as_of)
@@ -123,7 +124,7 @@ def set_model_status(session, tenant_id: str, model_id: str, status: str, actor:
     if m.status == status:
         return m  # idempotent: no duplicate evidence for a no-op flip
     m.status = status
-    E._ev(session, tenant_id, actor, f"SURVEILLANCE_MODEL_{status}", "model", m.model_id, m.version, m.model_id, {"status": status})
+    E._ev(session, tenant_id, actor, f"SURVEILLANCE_MODEL_{status}", "cmp_model", m.model_id, m.version, m.model_id, {"status": status})
     return m
 
 

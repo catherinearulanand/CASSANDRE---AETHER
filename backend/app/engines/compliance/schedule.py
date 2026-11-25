@@ -84,7 +84,7 @@ def run_sweep(session, tenant_id: str, as_of: datetime, population: list[dict] |
     job.finished_at = utcnow()
     job.detail = {**job.detail, "subjects": len(pop), "evaluations": n_eval, "new_evaluations": n_new, "status_counts": counts,
                   "cases": sorted(cases), "correlation_id": cid}
-    E._ev(session, tenant_id, actor, "SCHEDULED_SWEEP_COMPLETED", "job", job.job_id, 1, cid,
+    E._ev(session, tenant_id, actor, "SCHEDULED_SWEEP_COMPLETED", "cmp_job", job.job_id, 1, cid,
           {"slot": slot.isoformat(), "subjects": len(pop), "evaluations": n_eval, "status_counts": counts}, effective_at=as_of)
     session.flush()
     return {"job_id": job.job_id, "slot": slot.isoformat(), "status": job.status, "watermark_as_of": as_of.isoformat(),
@@ -119,7 +119,7 @@ def schedule_status(session, tenant_id: str, as_of: datetime, record: bool = Fal
                        detail={"slot": slot, "detected_as_of": as_of.isoformat()}, finished_at=utcnow())
             session.add(j)
             session.flush()
-            E._ev(session, tenant_id, actor or SYSTEM, "MISSED_RUN_DETECTED", "job", j.job_id, 1, j.job_id,
+            E._ev(session, tenant_id, actor or SYSTEM, "MISSED_RUN_DETECTED", "cmp_job", j.job_id, 1, j.job_id,
                   {"slot": slot, "detected_as_of": as_of.isoformat()}, effective_at=as_of,
                   rationale="Scheduled sweep slot is due but no completed sweep exists")
             recorded.append(slot)

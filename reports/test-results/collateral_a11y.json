@@ -1,0 +1,91 @@
+{
+ "checks": [
+  {
+   "check": "axe desk: no WCAG A/AA violations",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "axe allocation: no WCAG A/AA violations",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "axe stress: no WCAG A/AA violations",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "axe approval: no WCAG A/AA violations",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "tabs: ArrowRight moves selection + focus to the next tab",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "tabs: ArrowLeft wraps to the last tab",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "tabs: roving tabindex (only selected tab is in the tab order)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "dialog: opens from keyboard (Enter) and focus moves into the dialog",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "dialog: Tab x10 never leaves the dialog (focus trap)",
+   "ok": true,
+   "detail": "[True, True, True, True, True, True, True, True, True, True]"
+  },
+  {
+   "check": "dialog: Shift+Tab x10 never leaves the dialog",
+   "ok": true,
+   "detail": "[True, True, True, True, True, True, True, True, True, True]"
+  },
+  {
+   "check": "dialog: confirm button disabled until a reason is given",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "dialog: reason field has an accessible label",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "dialog: Escape closes and focus returns to the opening button",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "reflow 200% zoom (640px): no horizontal page scroll (wide tables scroll inside their own container)",
+   "ok": true,
+   "detail": "overflow 0px"
+  },
+  {
+   "check": "reflow 400% zoom (320px): no horizontal page scroll (wide tables scroll inside their own container)",
+   "ok": true,
+   "detail": "overflow 0px"
+  },
+  {
+   "check": "status chips all carry text (not colour-only)",
+   "ok": true,
+   "detail": "['!\\nRecommendation only \u2014 no collateral is posted, moved or transmitted. Reserved \u2260 posted. Simulated settlement is labelled SIMULATED.', '\u2022\\nSYNTHETIC', '\u2713\\nCHECKED', 'i\\nHYPOTHETICAL', 'i\\nNOT REQUIRED', '\u2715\\nINFEASIBLE', '\u2713\\nAPPROVED', '\u2713\\nCHECKED', '\u2713\\nDRAFTED', '\u2713\\nCHECKED', '\u2713\\nCHECKED', '\u2713\\nCHECKED']"
+  },
+  {
+   "check": "keyboard focus indicator visible on the focused element",
+   "ok": true,
+   "detail": ""
+  }
+ ],
+ "passed": 17,
+ "failed": 0
+}

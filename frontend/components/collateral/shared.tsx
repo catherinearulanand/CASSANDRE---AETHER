@@ -34,7 +34,9 @@ export const StateChip = ({ state }: { state: string }) => <StatusChip tone={sta
 
 export const fmt = (s: string | null | undefined) => {
   if (s == null) return "—";
-  const neg = s.startsWith("-"); const a = neg ? s.slice(1) : s; const [i, f] = a.split(".");
+  // Display only (full value stays in the title/API): >6 decimals is solver-division noise, so round for reading.
+  const r = /^-?\d{1,15}\.\d{7,}$/.test(s) ? Number(s).toFixed(6).replace(/\.?0+$/, "") : s;
+  const neg = r.startsWith("-"); const a = neg ? r.slice(1) : r; const [i, f] = a.split(".");
   return (neg ? "−" : "") + i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (f ? "." + f : "");
 };
 export const short = (h: string | null | undefined) => (h ? h.slice(0, 12) + "…" : "—");
@@ -120,3 +122,7 @@ export const NotTransmittedBanner = () => (
     <span aria-hidden>!</span> Recommendation only — no collateral is posted, moved or transmitted. Reserved ≠ posted. Simulated settlement is labelled SIMULATED.
   </div>
 );
+
+/** Money for display: rounded for reading (see fmt), full precision kept in the tooltip. */
+export const Money = ({ amount, currency }: { amount: string; currency: string; signed?: boolean }) =>
+  <span className="num" title={`${amount} ${currency}`}>{fmt(amount)} {currency}</span>;

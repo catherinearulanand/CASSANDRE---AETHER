@@ -37,7 +37,7 @@ export default function EligibilityNetting({ pkg, terms }: { pkg: PkgDetail; ter
       <section className="card" aria-labelledby="el-h">
         <h2 id="el-h">Eligible collateral schedule</h2>
         {rows.length === 0 ? <EmptyState title="No eligibility rows yet">Extract the CSA and review the eligible-collateral field.</EmptyState> :
-          <div className="scroll-x"><table>
+          <div className="scroll-x" role="region" tabIndex={0} aria-label="Eligible collateral schedule (scrollable)"><table>
             <caption className="sr-only">Eligible collateral with valuation percentage, haircut and FX haircut shown separately</caption>
             <thead><tr><th>Asset</th><th>Ccy</th><th>Issuer</th><th className="r">Valuation %</th><th className="r">Haircut %</th><th className="r">FX haircut %</th><th>Concentration cap</th><th>Min rating</th><th className="r">Max maturity (y)</th><th>Status</th></tr></thead>
             <tbody>{rows.map((r, i) => (
@@ -54,7 +54,7 @@ export default function EligibilityNetting({ pkg, terms }: { pkg: PkgDetail; ter
         <p className="muted">Governed by master <span className="mono">{pkg.master_id}</span> / <span className="mono">{pkg.csa_id}</span>. Netting is only ever within one netting set of one master; there is no cross-master offset.</p>
         {err && <ErrorState error={err} />}
         {!members ? <EmptyState title="Loading membership…" /> : members.length === 0 ? <EmptyState title="No trades mapped to this netting set yet" /> :
-          <div className="scroll-x"><table><caption className="sr-only">Trades and why they belong to this netting set</caption>
+          <div className="scroll-x" role="region" tabIndex={0} aria-label="Netting map trades (scrollable)"><table><caption className="sr-only">Trades and why they belong to this netting set</caption>
             <thead><tr><th>Trade</th><th>Declared master / set</th><th>Result</th><th>Why</th></tr></thead>
             <tbody>{members.map(m => <tr key={m.trade_id}><td className="mono">{m.trade_id}</td><td className="mono">{m.declared_master_id}<br />{m.declared_netting_set_id}</td>
               <td><StatusChip tone={TONE[m.status as keyof typeof TONE] ?? "neutral"}>{m.status}</StatusChip></td><td>{m.reason}</td></tr>)}</tbody></table></div>}

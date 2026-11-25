@@ -6,7 +6,12 @@ from sqlalchemy import func, select
 
 from app.engines.compliance import surv_service as SV
 from app.engines.compliance import surveillance as S
-from app.engines.compliance.models import CmpCase, CmpEvaluation, CmpModelVersion, CmpScore
+from app.engines.compliance.models import (
+    CmpCase,
+    CmpEvaluation,
+    CmpModelVersion,
+    CmpScore,
+)
 
 pytestmark = pytest.mark.gold
 

@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import func, select
+from tests.engines.compliance.conftest import CTX, IFSC_CTX
 
 from app.engines.compliance import cases as C
 from app.engines.compliance import engine as E
 from app.engines.compliance.models import CmpCase, CmpControl, CmpEvaluation
-from tests.engines.compliance.conftest import CTX, IFSC_CTX
 
 EXP = json.loads((Path(__file__).resolve().parents[3] / "fixtures" / "expected" / "compliance" / "golden.json").read_text(encoding="utf-8"))
 ASOF = datetime(2026, 8, 17, 4, 0, tzinfo=UTC)

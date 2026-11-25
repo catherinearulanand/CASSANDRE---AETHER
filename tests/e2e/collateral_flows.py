@@ -94,6 +94,13 @@ def main():
 
         # ------------------------------------------------------------------ F1: HYPOTHETICAL G01 (ETD) is flagged and never approvable
         mk_ctx, mk = login(b, "maker")
+        # Re-runnable: each run imports its OWN copy of the OTC inventory (simulated settlement consumes units permanently).
+        from app.engines.collateral.fixtures import otc as otc_fixture
+        fresh = otc_fixture()
+        fresh["snapshot_id"] = "INV-OTC-" + uuid.uuid4().hex[:8]
+        r = api_post(mk, "/collateral/inventory/import", fresh)
+        check("setup: fresh OTC inventory imported for this run", r.status == 201, r.text())
+        IDS["otc_snapshot"] = fresh["snapshot_id"]
         pid_h = run_optimisation(mk, IDS["etd_hyp"], IDS["etd_snapshot"])
         body = mk.inner_text("main")
         check("F1 hypothetical G01: UI shows HYPOTHETICAL marker", "HYPOTHETICAL" in body)
@@ -113,7 +120,12 @@ def main():
         body = mk.inner_text("main")
         check("F2 OTC G03: required coverage 9,500,000 USD", "9,500,000" in body, body[:200])
         check("F2 OTC: solver optimal + CHECKED + NOT TRANSMITTED visible", "solver: optimal" in body and "CHECKED" in body and "NOT TRANSMITTED" in body)
-        check("F2 OTC: baseline vs recommended shown (feasible case)", "Baseline vs recommended" in body)
+        base = api_get(mk, f"/collateral/proposals/{pid_a}")["baseline"]
+        if base["status"] == "AVAILABLE":   # a savings card must exist iff a feasible, verified baseline exists
+            check("F2 OTC: baseline AVAILABLE -> comparison card shown", "Baseline vs recommended" in body)
+        else:
+            check("F2 OTC: no feasible baseline (cash 6.0m < 9.5m call, other lots breach CSA caps) -> explicit 'No savings figure', no card",
+                  base["status"] == "UNAVAILABLE" and "No savings figure" in body and "Baseline vs recommended" not in body, base["status"])
         mk.screenshot(path=str(SHOTS / "collateral_g03_allocation.png"), full_page=True)
         prop = api_get(mk, f"/collateral/proposals/{pid_a}")
         cov = sum(D(l["effective_coverage"]) for l in prop["legs"])
@@ -127,7 +139,7 @@ def main():
         pid_c = run_optimisation(cp, IDS["otc_post"], IDS["otc_snapshot"])
         approval_tab(cp, pid_c)
         btn = cp.get_by_role("button", name=re.compile(r"^Approve"))
-        check("F2 maker (also a checker role) sees Approve disabled on own proposal", btn.is_disabled() and "made this proposal" in cp.inner_text("main"))
+        check("F2 maker (also a checker role) sees Approve disabled on own proposal", btn.is_disabled() and "created this proposal" in cp.inner_text("main"))
         r = api_post(cp, f"/collateral/proposals/{pid_c}/approve", {"reason": "self", "expected_revision": None})
         check("F2 server refuses self-approval (403 SELF_APPROVAL)", r.status == 403 and r.json()["code"] == "SELF_APPROVAL", r.text())
         cp.screenshot(path=str(SHOTS / "collateral_self_approval_refused.png"), full_page=True)
@@ -201,7 +213,6 @@ def main():
         check("F2 evidence trail contains every step in order", all(any(a == w for a in it) for w in want), acts)
 
         # ------------------------------------------------------------------ F3: G07 infeasible -> no savings card, no approval, no draft
-        from app.engines.collateral.fixtures import otc as otc_fixture
         small = otc_fixture()
         small["snapshot_id"] = "INV-G07-" + uuid.uuid4().hex[:6]
         small["lots"] = [dict(small["lots"][0], lot_id="CASH-USD-SMALL", units="3000000")]
@@ -227,7 +238,7 @@ def main():
         # ------------------------------------------------------------------ F5: stress lab is hypothetical and moves nothing
         before = api_get(mk, f"/collateral/inventory/{IDS['otc_snapshot']}")["lots"]
         mk.goto(alloc_url(IDS["otc_post"], IDS["otc_snapshot"], "stress"))
-        mk.wait_for_selector("h2, h3", timeout=20000)
+        mk.wait_for_selector("form[aria-label='Stress parameters']", timeout=20000)
         mk.screenshot(path=str(SHOTS / "collateral_stress_lab_before.png"), full_page=True)
         mk.fill("#st-h", "5")
         mk.get_by_role("button", name="Run stress").click()

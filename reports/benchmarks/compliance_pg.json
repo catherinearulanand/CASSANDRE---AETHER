@@ -1,0 +1,74 @@
+{
+ "database": "PostgreSQL 16 (Docker, 127.0.0.1:5433, aether_t5)",
+ "rows": 2000,
+ "rules": 50,
+ "runs": 30,
+ "load_before": {
+  "cpu_count": 8,
+  "cpu_load_percent": 69.0,
+  "free_mem_mb": 902.0
+ },
+ "evaluate_2000_rows_x_50_rules": {
+  "applicable_evaluations_per_call": [
+   50
+  ],
+  "total_applicable_evaluations": 1500,
+  "persisted_evaluations": 1500,
+  "status_counts": {
+   "PASS": 1500
+  },
+  "cold_new_inputs": {
+   "n": 30,
+   "p50_ms": 3936.0,
+   "p95_ms": 4282.5,
+   "max_ms": 4764.8,
+   "mean_ms": 3951.6
+  },
+  "warm_identical_repeat": {
+   "n": 30,
+   "p50_ms": 1988.4,
+   "p95_ms": 2204.8,
+   "max_ms": 2231.5,
+   "mean_ms": 1963.1
+  },
+  "per_rule_cold_p50_ms": 78.72,
+  "definition": "cold = evaluate+persist (facts incl. 2,000 rows are stored with EACH of the 50 evaluations); warm = idempotent repeat of identical inputs"
+ },
+ "event_burst": {
+  "events": 240,
+  "workers": 8,
+  "detected_cases": 240,
+  "errors": 0,
+  "error_samples": [],
+  "wall_seconds": 27.11,
+  "events_per_second": 8.9,
+  "detection_latency": {
+   "n": 240,
+   "p50_ms": 708.1,
+   "p95_ms": 1121.8,
+   "max_ms": 1752.8,
+   "mean_ms": 766.8
+  },
+  "definition": "latency = submit evaluate -> case committed and visible from a second session"
+ },
+ "load_during_burst_start": {
+  "cpu_count": 8,
+  "cpu_load_percent": 57.0,
+  "free_mem_mb": 1087.0
+ },
+ "load_after": {
+  "cpu_count": 8,
+  "cpu_load_percent": 74.0,
+  "free_mem_mb": 671.0
+ },
+ "targets": {
+  "note": "no performance target was specified in the compliance spec section used here; numbers are reported as measured",
+  "misses": []
+ },
+ "caveats": [
+  "Shared development host: other agents run builds/tests concurrently; see load_* fields. Numbers are not a clean-room measurement.",
+  "Facts (including the 2,000-row positions array) are persisted with every evaluation by design (replayability); storage grows linearly with rules x rows.",
+  "Burst positions are caller-supplied (CALLER_SUPPLIED provenance); margin/collateral services are not part of this latency.",
+  "Single Python process, SQLAlchemy sessions on a local Docker PostgreSQL; no network hop."
+ ]
+}

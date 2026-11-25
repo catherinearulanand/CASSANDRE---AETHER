@@ -7,12 +7,11 @@ the raw evaluation status.
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy import func, select
 
 from app.auth.security import Principal, require_distinct_checker
-from app.core import services
 from app.core.canonical import content_hash
 from app.core.config import get_settings
 from app.core.errors import Blocked, Conflict, Forbidden, NotFound, ValidationFailed
@@ -21,7 +20,13 @@ from app.db.base import lock_for_update, new_id, utcnow
 from app.db.models_core import ApprovalRow
 from app.engines.compliance import engine as E
 from app.engines.compliance.controls import LEGAL_AUTHORITY, WAIVABLE_AUTHORITY
-from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpControl, CmpEvaluation, CmpWaiver
+from app.engines.compliance.models import (
+    CmpCase,
+    CmpCaseEvent,
+    CmpControl,
+    CmpEvaluation,
+    CmpWaiver,
+)
 
 TRANSITIONS = {
     "OPEN": {"ACKNOWLEDGED", "DISMISSED"},
@@ -65,10 +70,8 @@ def _bump(c: CmpCase):
 def _record(session, p, c, action, payload, *, event_type, frm=None, to=None, comment=None, as_of=None, outbox=None):
     E.add_case_event(session, c.tenant_id, c.case_id, event_type, p.user_id, frm=frm, to=to, comment=comment, data=payload, as_of=as_of)
     corr = (c.eval_context or {}).get("correlation_id") or c.case_id
-    parents = [{"entity_type": "control_evaluation", "entity_id": c.last_evaluation_id}] if c.last_evaluation_id else []
-    if payload.get("approval_id"):
-        parents.append({"entity_type": "approval", "entity_id": payload["approval_id"]})
-    E._ev(session, c.tenant_id, actor_of(p), action, "case", c.case_id, c.revision, corr, {**payload, "parents": parents},
+    parents = [{"entity_type": "cmp_evaluation", "entity_id": c.last_evaluation_id}] if c.last_evaluation_id else []
+    E._ev(session, c.tenant_id, actor_of(p), action, "cmp_case", c.case_id, c.revision, corr, {**payload, "parents": parents},
           effective_at=as_of, rationale=comment)
     if outbox:
         emit(session, event_type=outbox, tenant_id=c.tenant_id, correlation_id=corr, aggregate_id=c.case_id,
@@ -83,7 +86,6 @@ def _actors(session, c: CmpCase, types: tuple[str, ...]) -> set[str]:
 def remedy_options(c: CmpCase) -> list[dict]:
     """Options and consequences only. None of these is an executable market action; nothing is transmitted."""
     fam = c.family
-    ev_reasons: list[str] = []
     o: list[dict] = []
     if c.kind == "ANOMALY_INVESTIGATION":
         return [
@@ -308,7 +310,7 @@ def create_waiver(session, p: Principal, body: dict) -> CmpWaiver:
                   valid_from=vf, valid_to=vt, requested_by=p.user_id, provenance="SYNTHETIC")
     session.add(w)
     session.flush()
-    E._ev(session, p.tenant_id, actor_of(p), "WAIVER_REQUESTED", "waiver", w.waiver_id, 1, w.waiver_id,
+    E._ev(session, p.tenant_id, actor_of(p), "WAIVER_REQUESTED", "cmp_waiver", w.waiver_id, 1, w.waiver_id,
           {"control_key": w.control_key, "subject_id": subject, "valid_from": vf.isoformat(), "valid_to": vt.isoformat()}, effective_at=vf, rationale=w.reason)
     return w
 
@@ -330,7 +332,7 @@ def approve_waiver(session, p: Principal, waiver_id: str, decision: str, reason:
     session.add(appr)
     w.status, w.approved_by, w.approval_id = ("ACTIVE" if decision == "APPROVE" else "REJECTED"), p.user_id, appr.approval_id
     w.revision += 1
-    E._ev(session, p.tenant_id, actor_of(p), "WAIVER_" + ("APPROVED" if decision == "APPROVE" else "REJECTED"), "waiver", w.waiver_id, w.revision,
+    E._ev(session, p.tenant_id, actor_of(p), "WAIVER_" + ("APPROVED" if decision == "APPROVE" else "REJECTED"), "cmp_waiver", w.waiver_id, w.revision,
           w.waiver_id, {"approval_id": appr.approval_id, "hash": snap}, rationale=reason)
     return w
 

@@ -154,5 +154,19 @@
     "bundle_events": 202,
     "note": "includes incremental checkpoint, signing, skeleton of ALL chain rows up to the checkpoint, zip, vault store"
   },
-  "process_peak_working_set_mb": 0.0
+  "process_peak_working_set_mb": null,
+  "process_peak_working_set_note": "Measurement defect: the ctypes GetProcessMemoryInfo call returned 0.0 (invalid) and is discarded. Only the Python-heap peak (tracemalloc, separate traced rep) is reported: ~25 MB for a full pass regardless of chain length (streaming, yield_per=5000).",
+  "honest_summary": {
+    "met": [
+      "single-writer append p95 88.6 ms < 100 ms target (p99 115.9 ms exceeds it)",
+      "10k full verify 2.5 s max < 5 s target",
+      "incremental anchored verify of 100 new events is ~24 ms on both 10k and 100k chains (vs 14.6-20.9 s full on 100k)"
+    ],
+    "missed_or_caveated": [
+      "contended append (same tenant) misses a 100 ms p95: 4 threads 288 ms, 8 threads 1075 ms, 4 processes 368 ms; throughput 26-35 appends/s. By design all writers of one tenant serialise on the chain-head row lock; this is the throughput ceiling per tenant.",
+      "full verification of 100,000 events takes 15-21 s (linear, ~0.15 ms/event); no target was set for 100k, reported as measured.",
+      "export from a 100k chain takes ~1.7 s mostly because the skeleton of all chain rows up to the checkpoint is included; it grows linearly with chain length."
+    ],
+    "noise": "shared machine with concurrent test suites; single run, no repeats of the whole benchmark; Docker PostgreSQL on loopback."
+  }
 }

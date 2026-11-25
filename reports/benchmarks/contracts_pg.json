@@ -1,0 +1,69 @@
+{
+ "database": "postgresql",
+ "agreements": 120,
+ "seed_workflow": {
+  "total_s": 63.3,
+  "n": 120,
+  "p50_ms": 483.42,
+  "p95_ms": 844.48,
+  "max_ms": 1033.67,
+  "mean_ms": 527.29,
+  "per_agreement_note": "create+extract+all field reviews+propose+freeze, each with evidence events"
+ },
+ "results": {
+  "resolve_terms_cold_first_resolution": {
+   "n": 120,
+   "p50_ms": 11.35,
+   "p95_ms": 14.84,
+   "max_ms": 21.34,
+   "mean_ms": 11.64
+  },
+  "resolve_terms_warm": {
+   "n": 360,
+   "p50_ms": 8.23,
+   "p95_ms": 11.95,
+   "max_ms": 21.11,
+   "mean_ms": 8.44
+  },
+  "netting_membership_lookup": {
+   "n": 300,
+   "p50_ms": 2.45,
+   "p95_ms": 4.71,
+   "max_ms": 10.15,
+   "mean_ms": 2.73
+  },
+  "registry_list_all_filters": {
+   "n": 40,
+   "p50_ms": 32.97,
+   "p95_ms": 47.52,
+   "max_ms": 71.64,
+   "mean_ms": 34.3
+  },
+  "terms_view_one_package": {
+   "n": 30,
+   "p50_ms": 37.78,
+   "p95_ms": 55.55,
+   "max_ms": 60.24,
+   "mean_ms": 39.75
+  },
+  "record_resolution_20_audited": {
+   "total_ms": 446.0
+  },
+  "evidence_replay_20_resolutions": {
+   "ms": 296.2,
+   "status": "MATCH",
+   "items": 20
+  }
+ },
+ "machine_load_before": {
+  "cpu_load_percent": 62.0,
+  "python_node_msedge_processes": 40,
+  "logical_cpus": 8
+ },
+ "machine_load_after": {
+  "cpu_load_percent": 54.0,
+  "python_node_msedge_processes": 32,
+  "logical_cpus": 8
+ },
+ "caveat": "Single machine; Docker PostgreSQL 16 on localhost; other engineering workers share the CPU. Indicative only."
+}

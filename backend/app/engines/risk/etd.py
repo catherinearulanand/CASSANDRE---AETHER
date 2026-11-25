@@ -16,7 +16,7 @@ Q2 = Decimal("0.01")
 
 
 def _ncdf(x: float) -> float:
-    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+    return 0.5 * math.erfc(-x / math.sqrt(2.0))  # erfc keeps full relative accuracy in the tails (1+erf cancels to 0.0 for x < ~-8)
 
 
 def bs_price_delta(opt_type: str, s: float, k: float, t: float, r: float, q: float, vol: float) -> tuple[float, float]:
@@ -44,14 +44,14 @@ def position_value(inst: dict, lots: Decimal, md: MarketData, val: date, shock: 
         if mark is None:
             raise PricingError(f"missing mark for {inst['instrument_id']}")
         return lots * mult * mark * shock, 1.0
+    exp = date.fromisoformat(inst["expiry"])
+    if exp <= val:
+        raise PricingError(f"option {inst['instrument_id']} expired/at expiry; settlement handled by instrument settlement_type, not repriced")
     und = inst.get("underlying_id")
     s0 = md.marks.get(und)
     vol = md.vols.get(inst["instrument_id"])
     if s0 is None or vol is None:
         raise PricingError(f"missing underlying mark or vol for {inst['instrument_id']}")
-    exp = date.fromisoformat(inst["expiry"])
-    if exp <= val:
-        raise PricingError(f"option {inst['instrument_id']} expired/at expiry; settlement handled by instrument settlement_type, not repriced")
     t = (exp - val).days / 365.0
     r = float(md.rates.get(inst["currency"], Decimal(0)))
     q = float(md.rates.get(inst["currency"] + "_DIV", Decimal(0)))
@@ -62,13 +62,13 @@ def position_value(inst: dict, lots: Decimal, md: MarketData, val: date, shock: 
 
 
 def _opt_price(inst: dict, md: MarketData, val: date) -> float:
+    exp = date.fromisoformat(inst["expiry"])
+    if exp <= val:
+        raise PricingError(f"option {inst['instrument_id']} expired/at expiry")
     und, vol = inst["underlying_id"], md.vols.get(inst["instrument_id"])
     s0 = md.marks.get(und)
     if s0 is None or vol is None:
         raise PricingError(f"missing underlying mark or vol for {inst['instrument_id']}")
-    exp = date.fromisoformat(inst["expiry"])
-    if exp <= val:
-        raise PricingError(f"option {inst['instrument_id']} expired/at expiry")
     r = float(md.rates.get(inst["currency"], Decimal(0)))
     q = float(md.rates.get(inst["currency"] + "_DIV", Decimal(0)))
     return bs_price_delta(inst["option_type"], float(s0), float(inst["strike"]), (exp - val).days / 365.0, r, q, float(vol))[0]
@@ -118,6 +118,8 @@ def position_metrics(positions: list[dict], instruments: dict[str, dict], md: Ma
     for p in positions:
         inst = instruments[p["instrument_id"]]
         lots = Decimal(p["signed_lots"])
+        if inst["type"] != "FUT" and date.fromisoformat(inst["expiry"]) <= val:
+            raise PricingError(f"option {inst['instrument_id']} expired/at expiry: delta and notional are not defined (settlement is not repriced)")
         under = inst["instrument_id"] if inst["type"] == "FUT" else inst["underlying_id"]
         mk = md.marks.get(under)
         if mk is None:

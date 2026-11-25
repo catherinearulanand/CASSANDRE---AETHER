@@ -37,7 +37,7 @@ export default function DeskView({ ctx }: { ctx: Ctx }) {
       <section className="card" style={{ marginTop: 16 }} aria-labelledby="inv">
         <h2 id="inv">Eligible inventory by class and currency</h2>
         {x.eligible_inventory.length === 0 ? <EmptyState title="No eligible lots for this obligation" /> : (
-          <div className="scroll-x"><table><caption className="sr-only">Eligible inventory</caption>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Eligible inventory</caption>
             <thead><tr><th scope="col">Asset class</th><th scope="col">Lot ccy</th><th scope="col" className="r">Lots</th><th scope="col" className="r">Available units</th><th scope="col" className="r">Effective coverage ({cur})</th></tr></thead>
             <tbody>{x.eligible_inventory.map(r => (
               <tr key={r.asset_class + r.currency}><td>{r.asset_class}</td><td>{r.currency}</td><td className="r num">{r.lots}</td>
@@ -50,7 +50,7 @@ export default function DeskView({ ctx }: { ctx: Ctx }) {
           {reasons.map(r => <button key={r} className={reason === r ? "primary" : ""} aria-pressed={reason === r} onClick={() => setReason(r)}>{r.replace(/_/g, " ")} ({x.exclusions_by_reason[r]})</button>)}
         </div>
         {excluded.length === 0 ? <EmptyState title="No lots excluded for this filter" /> : (
-          <div className="scroll-x"><table><caption className="sr-only">Excluded lots</caption><thead><tr><th scope="col">Lot</th><th scope="col">Why it cannot be used</th></tr></thead>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Excluded lots</caption><thead><tr><th scope="col">Lot</th><th scope="col">Why it cannot be used</th></tr></thead>
             <tbody>{excluded.map(l => <tr key={l.lot_id}><td className="mono">{l.lot_id}</td><td>{l.reasons.map(reasonText).join(" · ")}</td></tr>)}</tbody></table></div>)}
         <p className="faint">Unknown price, rating, FX or entitlement excludes a lot; nothing is defaulted. Wrong-way restrictions use explicit issuer relationships, not name similarity.</p>
       </section>

@@ -106,5 +106,42 @@
   "check": "axe: impact result - no serious/critical violations",
   "ok": true,
   "detail": []
+ },
+ {
+  "check": "390px reflow: command has no page-level horizontal scroll",
+  "ok": true,
+  "detail": {
+   "sw": 390,
+   "cw": 390
+  }
+ },
+ {
+  "check": "390px reflow: workbench has no page-level horizontal scroll",
+  "ok": true,
+  "detail": {
+   "sw": 390,
+   "cw": 390
+  }
+ },
+ {
+  "check": "390px reflow: versions has no page-level horizontal scroll",
+  "ok": true,
+  "detail": {
+   "sw": 390,
+   "cw": 390
+  }
+ },
+ {
+  "check": "390px reflow: impact has no page-level horizontal scroll",
+  "ok": true,
+  "detail": {
+   "sw": 390,
+   "cw": 390
+  }
+ },
+ {
+  "check": "axe: mobile 390 impact tab - no serious/critical violations",
+  "ok": true,
+  "detail": []
  }
 ]

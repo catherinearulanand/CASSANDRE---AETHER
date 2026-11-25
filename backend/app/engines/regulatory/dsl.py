@@ -306,7 +306,8 @@ class _Eval:
 
     def tick(self):
         self.steps += 1
-        if self.steps > MAX_STEPS or time.monotonic() - self.t0 > MAX_SECONDS:
+        # the step budget is checked every call; the wall-clock budget every 32 steps (a monotonic() read per step dominated profiles)
+        if self.steps > MAX_STEPS or (self.steps & 31 == 0 and time.monotonic() - self.t0 > MAX_SECONDS):
             raise DSLLimitError("evaluation budget exceeded")
 
     def note(self, op, res, detail=None, depth=0):
@@ -439,9 +440,10 @@ class _Eval:
         return res
 
 
-def evaluate(node: dict, context: dict, parameters: dict | None = None) -> tuple[str, list[dict]]:
-    """Evaluate a COMPILED node. Returns ("TRUE"|"FALSE"|"UNKNOWN", trace). Budget overrun => UNKNOWN + trace."""
-    params, _ = normalise_params(parameters)
+def evaluate(node: dict, context: dict, parameters: dict | None = None, normalised: dict | None = None) -> tuple[str, list[dict]]:
+    """Evaluate a COMPILED node. Returns ("TRUE"|"FALSE"|"UNKNOWN", trace). Budget overrun => UNKNOWN + trace.
+    `normalised` = normalise_params(parameters)[0] computed once by a caller that evaluates the same rule many times (batch resolve)."""
+    params = normalised if normalised is not None else normalise_params(parameters)[0]
     ev = _Eval(context, params)
     try:
         r = ev.boolean(node)

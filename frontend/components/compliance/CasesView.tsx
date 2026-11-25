@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { EmptyState, ErrorState, ProvenanceBadge, StatusChip } from "@/components/ui";
 import { api, ApiError } from "@/lib/api";
 import { useSession } from "@/lib/session";
-import { API, Amount, ConfirmAction, FieldErrors, Severity, Status, fmtTs, useAction, useLoad, type CaseDetail, type CaseRow } from "./shared";
+import { API, Amount, ConfirmAction, FieldErrors, Severity, Status, fmtTs, useAction, useLoad, type CaseDetail, type CaseRow, useNarrow } from "./shared";
 
 const NEXT: Record<string, string[]> = {
   OPEN: ["ACKNOWLEDGED", "DISMISSED"], ACKNOWLEDGED: ["INVESTIGATING", "DISMISSED"], INVESTIGATING: ["DISMISSED"],
@@ -14,10 +14,11 @@ const NEXT: Record<string, string[]> = {
 export default function CasesView({ selected, onSelect }: { selected: string | null; onSelect: (id: string | null) => void }) {
   const [state, setState] = useState(""); const [severity, setSeverity] = useState(""); const [kind, setKind] = useState("");
   const { market } = useSession();
+  const narrow = useNarrow();
   const qs = new URLSearchParams({ limit: "100", ...(state && { state }), ...(severity && { severity }), ...(kind && { kind }) }).toString();
   const list = useLoad<{ items: CaseRow[] }>(`${API}/cases?${qs}`);
   return (
-    <div className="grid" style={{ gridTemplateColumns: "minmax(280px, 380px) minmax(0, 1fr)", alignItems: "start" }}>
+    <div className="grid" style={{ gridTemplateColumns: narrow ? "minmax(0, 1fr)" : "minmax(280px, 380px) minmax(0, 1fr)", alignItems: "start" }}>
       <section className="card" aria-labelledby="cl" style={{ minWidth: 0 }}>
         <h2 id="cl">Cases</h2>
         <div className="grid c3" style={{ gap: 8, marginBottom: 8 }}>
@@ -60,11 +61,12 @@ function CaseWorkbench({ id, onChanged }: { id: string; onChanged: () => void })
   return (
     <div className="grid" style={{ gap: 16 }}>
       <section className="card" aria-labelledby="cw">
-        <div className="row"><h2 id="cw" style={{ margin: 0 }}>{c.title}</h2><span className="spacer" /><Severity s={c.severity} /><StatusChip tone="neutral">{c.state.replace("_", " ")}</StatusChip><ProvenanceBadge kind="SYNTHETIC" /></div>
+        <div className="row" style={{ flexWrap: "wrap" }}><h2 id="cw" style={{ margin: 0, overflowWrap: "anywhere", flex: "1 1 220px" }}>{c.title}</h2><span className="spacer" /><Severity s={c.severity} /><StatusChip tone="neutral">{c.state.replace("_", " ")}</StatusChip><ProvenanceBadge kind="SYNTHETIC" /></div>
         <div role="note" className="state" style={{ textAlign: "left", marginTop: 12, borderStyle: "solid", borderColor: anomaly ? "#2f4c68" : "var(--border)" }}>
           {anomaly ? <><StatusChip tone="info">STATISTICAL ANOMALY — INVESTIGATION SIGNAL</StatusChip> <span>{c.anomaly_disclaimer}</span></>
             : <><StatusChip tone={c.last_status === "FAIL" ? "danger" : "warn"}>DETERMINISTIC {c.last_status}</StatusChip> <span>{c.separation_note} Raw outcome is never altered by acknowledgement, waiver or dismissal.</span></>}
         </div>
+        {c.hypothetical && <div role="note" className="state" style={{ textAlign: "left", marginTop: 12, borderColor: "#6b5420" }}><StatusChip tone="warn">HYPOTHETICAL — NOT OFFICIAL COMPLIANCE STATUS</StatusChip> <span>Evaluated from a what-if margin result (draft rule revision or scenario). It never counts in official status and cannot be resolved as if it were a live breach.</span></div>}
         <dl style={{ display: "grid", gridTemplateColumns: "max-content 1fr", gap: "4px 16px", marginBottom: 0 }}>
           <dt className="muted">Affected subject</dt><dd className="mono" style={{ margin: 0 }}>{c.subject_id} · {c.market_type}</dd>
           <dt className="muted">Occurrences</dt><dd style={{ margin: 0 }}>{c.occurrence_count} (reopened {c.reopen_count}×) · opened as-of {fmtTs(c.opened_as_of)} · latest {fmtTs(c.last_as_of)}</dd>
@@ -99,7 +101,7 @@ function CaseWorkbench({ id, onChanged }: { id: string; onChanged: () => void })
         </section>)}
 
       <Actions c={c} role={principal?.roles ?? []} userId={principal?.user_id ?? ""} done={refresh} />
-      <Remediation c={c} />
+      <Remediation c={c} done={refresh} />
       <section className="card" aria-labelledby="tl">
         <h2 id="tl">Event timeline (append-only)</h2>
         <ol style={{ paddingLeft: 18, margin: 0 }}>
@@ -170,7 +172,7 @@ function Actions({ c, role, userId, done }: { c: CaseDetail; role: string[]; use
   );
 }
 
-function Remediation({ c }: { c: CaseDetail }) {
+function Remediation({ c, done }: { c: CaseDetail; done: () => void }) {
   const [sel, setSel] = useState(""); const [why, setWhy] = useState(""); const [dl, setDl] = useState("");
   const act = useAction(); const [, setTick] = useState(0);
   const { principal } = useSession();
@@ -181,7 +183,7 @@ function Remediation({ c }: { c: CaseDetail }) {
       <p className="muted">Options only — none is an executable market action and nothing is transmitted. Selecting one routes a request to the owning engine for its own approval flow.</p>
       {c.state === "INVESTIGATING" && can ? (
         <form onSubmit={async e => { e.preventDefault(); if (await act.run(`${API}/cases/${c.case_id}/remediate`, { expected_revision: c.revision, selected: sel, rationale: why, deadline: dl || null,
-          rejected: c.remedy_options.filter(o => o.route !== sel && (document.getElementById(`rej-${o.route}`) as HTMLInputElement | null)?.value).map(o => ({ route: o.route, reason: (document.getElementById(`rej-${o.route}`) as HTMLInputElement).value })) })) setTick(t => t + 1); }}>
+          rejected: c.remedy_options.filter(o => o.route !== sel && (document.getElementById(`rej-${o.route}`) as HTMLInputElement | null)?.value).map(o => ({ route: o.route, reason: (document.getElementById(`rej-${o.route}`) as HTMLInputElement).value })) })) setTick(t => t + 1); done(); }}>
           <fieldset style={{ border: 0, padding: 0 }}><legend className="sr-only">Remedy</legend>
             {c.remedy_options.map(o => (
               <div key={o.route} className="card" style={{ marginBottom: 8, background: "var(--elevated)" }}>

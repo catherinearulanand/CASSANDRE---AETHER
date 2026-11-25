@@ -43,11 +43,19 @@ function Inner() {
               <h2 style={{ margin: 0 }}>{pkg.netting_set_id}</h2><StatusChip tone={pkg.status === "FROZEN" ? "ok" : "warn"}>{pkg.status.replace(/_/g, " ")}</StatusChip>
               <ProvenanceBadge kind="SYNTHETIC" /><span className="muted">{pkg.party_a_name} (A) · {pkg.party_b_name} (B) · base {pkg.base_currency} · {pkg.governing_law}</span>
             </div>
-            <div role="tablist" aria-label="Agreement sections" className="row" style={{ borderBottom: "1px solid var(--border)", marginBottom: 16, gap: 4 }}>
-              {TABS.map(([k, label]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => nav(pkgId, k)}
+            <div role="tablist" aria-label="Agreement sections" className="row" style={{ borderBottom: "1px solid var(--border)", marginBottom: 16, gap: 4 }}
+              onKeyDown={e => {
+                const i = TABS.findIndex(([k]) => k === tab);
+                const j = e.key === "ArrowRight" ? (i + 1) % TABS.length : e.key === "ArrowLeft" ? (i + TABS.length - 1) % TABS.length
+                  : e.key === "Home" ? 0 : e.key === "End" ? TABS.length - 1 : -1;
+                if (j < 0) return;
+                e.preventDefault(); nav(pkgId, TABS[j][0]);
+                requestAnimationFrame(() => document.getElementById(`tab-${TABS[j][0]}`)?.focus());
+              }}>
+              {TABS.map(([k, label]) => <button key={k} id={`tab-${k}`} role="tab" aria-selected={tab === k} aria-controls="tabpanel-main" tabIndex={tab === k ? 0 : -1} onClick={() => nav(pkgId, k)}
                 style={{ border: 0, borderBottom: `2px solid ${tab === k ? "var(--accent)" : "transparent"}`, borderRadius: 0, background: "transparent", color: tab === k ? "var(--accent)" : "var(--text-2)", minHeight: 44 }}>{label}</button>)}
             </div>
-            <div role="tabpanel">
+            <div role="tabpanel" id="tabpanel-main" aria-labelledby={`tab-${tab}`}>
               {tab === "review" && <ReviewWorkspace pkg={pkg} terms={terms} reload={load} />}
               {tab === "freeze" && <FreezeTimeline pkg={pkg} terms={terms} reload={load} />}
               {tab === "eligibility" && <EligibilityNetting pkg={pkg} terms={terms} />}

@@ -507,6 +507,11 @@ def _persist(session, tenant_id: str, ctx: dict, ev: dict, *, kind: str, state: 
         expires_at=now + timedelta(seconds=get_settings().approval_ttl_seconds))
     session.add(p)
     for l in legs:
+        # display-only ratios are stored at 12 dp: the share column is VARCHAR(24) and PostgreSQL (unlike SQLite) enforces it.
+        # Not part of proposal_hash (which covers lot_id/quantity/effective_coverage/cost_horizon).
+        l = {**l, "share_of_coverage": dstr(Decimal(l["share_of_coverage"]).quantize(Decimal("1e-12")))}
+        for f in ("valuation_factor", "fx_factor"):
+            l[f] = dstr(Decimal(l[f]).quantize(Decimal("1e-12"))) if len(str(l[f])) > 24 else l[f]
         session.add(ColLeg(tenant_id=tenant_id, proposal_id=pid, **l))
     for c in res.get("constraints", []):
         session.add(ColConstraint(tenant_id=tenant_id, proposal_id=pid, name=c["name"], kind=c["kind"], limit_value=c["limit"],
@@ -517,7 +522,7 @@ def _persist(session, tenant_id: str, ctx: dict, ev: dict, *, kind: str, state: 
 
 def _parents(ctx: dict, inventory_snapshot_id: str) -> list[dict]:
     """Lineage edges in VERITAS' format {entity_type, entity_id}: margin result, inventory snapshot, rule set, terms."""
-    out = [{"entity_type": "margin_result", "entity_id": ctx["margin"]["result_id"]},
+    out = [{"entity_type": "risk_result", "entity_id": ctx["margin"]["result_id"]},
            {"entity_type": SNAPSHOT_TYPE, "entity_id": inventory_snapshot_id}]
     if ctx.get("rule_set_hash"):
         out.append({"entity_type": "rule_set", "entity_id": ctx["rule_set_hash"]})

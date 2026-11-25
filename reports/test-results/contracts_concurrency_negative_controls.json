@@ -1,0 +1,53 @@
+{
+ "database": "PostgreSQL 16 (aether_t2)",
+ "controls": [
+  {
+   "control": "row lock in get_package removed",
+   "test": "test_concurrent_review_of_same_field_exactly_one_wins",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 4.16s"
+  },
+  {
+   "control": "row lock in get_package removed",
+   "test": "test_concurrent_extract_same_package_extracts_once",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 5.11s"
+  },
+  {
+   "control": "row lock in get_package removed",
+   "test": "test_concurrent_propose_freeze_creates_single_pending_approval",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 5.44s"
+  },
+  {
+   "control": "row lock in get_package removed",
+   "test": "test_concurrent_amendment_filing_serialises",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 9.25s"
+  },
+  {
+   "control": "create_package IntegrityError guard removed",
+   "test": "test_concurrent_create_same_netting_set_exactly_one_wins",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 5.81s"
+  },
+  {
+   "control": "register_trade guard removed (agreement lock + IntegrityError handler)",
+   "test": "test_concurrent_register_same_trade_is_idempotent_no_raw_error",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 9.08s"
+  },
+  {
+   "control": "record_facts IntegrityError guard removed",
+   "test": "test_concurrent_fact_snapshot_same_id_exactly_one_wins",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 5.99s"
+  },
+  {
+   "control": "resolution insert-if-absent removed",
+   "test": "test_concurrent_resolve_same_inputs_all_resolve_same_hash",
+   "fails_without_guard": true,
+   "summary": "1 failed, 1 warning in 14.87s"
+  }
+ ]
+}

@@ -4,6 +4,7 @@ import threading
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
+from tests.engines.compliance.conftest import CTX, P
 
 from app.core.errors import ApiError
 from app.db.base import SessionLocal
@@ -12,9 +13,13 @@ from app.engines.compliance import cases as C
 from app.engines.compliance import engine as E
 from app.engines.compliance import schedule as SCH
 from app.engines.compliance import surv_service as SV
-from app.engines.compliance.models import CmpCase, CmpEvaluation, CmpJob, CmpModelVersion
+from app.engines.compliance.models import (
+    CmpCase,
+    CmpEvaluation,
+    CmpJob,
+    CmpModelVersion,
+)
 from app.engines.evidence.models import EvEvent
-from tests.engines.compliance.conftest import CTX, P
 
 ASOF = datetime(2026, 8, 17, 4, 0, tzinfo=UTC)
 
@@ -179,7 +184,7 @@ def test_concurrent_trainings_get_unique_model_versions(tenant):
     def train(i):
         with SessionLocal() as s:
             try:
-                r = SV.train_and_persist(s, tenant, {"id": f"u-{i}", "type": "USER", "role": "compliance_officer"}, 42 + i, 8, 120)
+                SV.train_and_persist(s, tenant, {"id": f"u-{i}", "type": "USER", "role": "compliance_officer"}, 42 + i, 8, 120)
                 s.commit()
                 return "ok"
             except Exception:

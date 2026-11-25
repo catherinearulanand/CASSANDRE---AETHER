@@ -158,6 +158,10 @@ def _validate_doc(i: int, d: dict, pkg_names: tuple[str, str], force_kind: str |
         fe[f"documents.{i}.text"] = "non-empty UTF-8 text up to 500,000 characters without NUL is required"
     if not ref:
         fe[f"documents.{i}.doc_ref"] = "required"
+    elif len(ref) > 120:
+        fe[f"documents.{i}.doc_ref"] = "at most 120 characters"
+    if isinstance(d.get("title"), str) and len(d["title"]) > 300:
+        fe[f"documents.{i}.title"] = "at most 300 characters"
     try:
         eff = T.parse_dt(d["effective_from"])
     except Exception:  # noqa: BLE001
@@ -208,6 +212,10 @@ def create_package(db, p: Principal, corr: str, body: dict) -> dict:
         fe["documents"] = "1..20 documents required"
     if body.get("party_a_id") and body.get("party_a_id") == body.get("party_b_id"):
         fe["party_b_id"] = "parties must differ"
+    for k, lim in (("master_id", 80), ("csa_id", 80), ("netting_set_id", 80), ("party_a_id", 80), ("party_b_id", 80),
+                   ("party_a_name", 200), ("party_b_name", 200), ("governing_law", 200)):
+        if isinstance(body.get(k), str) and len(body[k].strip()) > lim:
+            fe[k] = f"at most {lim} characters"
     if fe:
         raise ValidationFailed("Package validation failed", field_errors=fe)
     existing = db.execute(select(ConPackage).where(ConPackage.tenant_id == p.tenant_id,
@@ -270,7 +278,8 @@ def add_document(db, p: Principal, corr: str, package_id: str, body: dict, amend
 def _rebuild_eligibility(db, pkg: ConPackage, f: ConField) -> None:
     for r in db.execute(select(ConEligibility).where(ConEligibility.field_id == f.field_id)).scalars():
         db.delete(r)
-    if f.field_key == "eligible_schedule" and isinstance(f.value, list) and f.status != "REJECTED":
+    # Only VALIDATED schedules are materialised (an UNRESOLVED field's value failed validation and may not even fit the columns).
+    if f.field_key == "eligible_schedule" and isinstance(f.value, list) and f.status in ("PROPOSED", "APPROVED"):
         for r in f.value:
             db.add(ConEligibility(tenant_id=pkg.tenant_id, package_id=pkg.package_id, field_id=f.field_id, field_status=f.status,
                                   **{k: r.get(k) for k in ("asset_class", "currency", "issuer_class", "valuation_pct", "haircut_pct",
@@ -763,20 +772,49 @@ def record_facts(db, p: Principal, corr: str, facts: dict, fact_snapshot_id: str
 
 
 # ----------------------------------------------------------------------------------------- read models
-def package_summary(db, pkg: ConPackage) -> dict:
-    fields, docs, vers = _fields(db, pkg), _docs(db, pkg), _versions(db, pkg)
-    counts = {s: sum(1 for f in fields if f.status == s) for s in ("PROPOSED", "UNRESOLVED", "APPROVED", "REJECTED")}
-    members = db.execute(select(func.count()).select_from(ConNettingMembership).where(
-        ConNettingMembership.tenant_id == pkg.tenant_id, ConNettingMembership.netting_set_id == pkg.netting_set_id,
-        ConNettingMembership.status == "MEMBER")).scalar_one()
+_STATUSES = ("PROPOSED", "UNRESOLVED", "APPROVED", "REJECTED")
+
+
+def _bulk_summary_data(db, pkgs: list[ConPackage]) -> dict[str, dict]:
+    """Grouped queries for a page of packages (no per-row queries, and no document text is loaded).
+    Found by the PostgreSQL benchmark: the per-package version cost 635 ms p50 at 120 agreements."""
+    out = {p.package_id: {"counts": dict.fromkeys(_STATUSES, 0), "docs": 0, "missing": 0, "pending": 0, "latest": None, "members": 0}
+           for p in pkgs}
+    for i in range(0, len(pkgs), 400):  # chunked: SQLite caps bound variables
+        chunk = pkgs[i:i + 400]
+        ids = [p.package_id for p in chunk]
+        for pid, st, n in db.execute(select(ConField.package_id, ConField.status, func.count()).where(ConField.package_id.in_(ids))
+                                     .group_by(ConField.package_id, ConField.status)):
+            out[pid]["counts"][st] = n
+        for pid, missing, mode in db.execute(select(ConDocument.package_id, ConDocument.missing_annexes, ConDocument.extracted_mode)
+                                             .where(ConDocument.package_id.in_(ids))):
+            o = out[pid]
+            o["docs"] += 1
+            o["missing"] += 1 if missing else 0
+            o["pending"] += 1 if mode is None else 0
+        for pid, v in db.execute(select(ConVersion.package_id, func.max(ConVersion.version_no)).where(ConVersion.package_id.in_(ids))
+                                 .group_by(ConVersion.package_id)):
+            out[pid]["latest"] = v
+        by_ns = {p.netting_set_id: p.package_id for p in chunk}
+        for ns, n in db.execute(select(ConNettingMembership.netting_set_id, func.count()).where(
+                ConNettingMembership.tenant_id == chunk[0].tenant_id, ConNettingMembership.status == "MEMBER",
+                ConNettingMembership.netting_set_id.in_(list(by_ns))).group_by(ConNettingMembership.netting_set_id)):
+            out[by_ns[ns]]["members"] = n
+    return out
+
+
+def package_summary(db, pkg: ConPackage, pre: dict | None = None) -> dict:
+    if pre is None:
+        pre = _bulk_summary_data(db, [pkg])[pkg.package_id]
+    counts, members = pre["counts"], pre["members"]
     return {"package_id": pkg.package_id, "master_id": pkg.master_id, "csa_id": pkg.csa_id, "netting_set_id": pkg.netting_set_id,
             "party_a_id": pkg.party_a_id, "party_b_id": pkg.party_b_id, "party_a_name": pkg.party_a_name,
             "party_b_name": pkg.party_b_name, "base_currency": pkg.base_currency, "governing_law": pkg.governing_law,
-            "status": pkg.status, "revision": pkg.revision, "documents": len(docs),
-            "docs_with_missing_annexes": sum(1 for d in docs if d.missing_annexes),
-            "docs_pending_extraction": sum(1 for d in docs if d.extracted_mode is None),
+            "status": pkg.status, "revision": pkg.revision, "documents": pre["docs"],
+            "docs_with_missing_annexes": pre["missing"],
+            "docs_pending_extraction": pre["pending"],
             "fields": counts, "outstanding_review": counts["PROPOSED"] + counts["UNRESOLVED"],
-            "latest_version_no": vers[-1].version_no if vers else None, "trades_in_netting_set": members,
+            "latest_version_no": pre["latest"], "trades_in_netting_set": members,
             "created_at": pkg.created_at.isoformat(), "provenance": pkg.provenance}
 
 
@@ -803,9 +841,10 @@ def list_packages(db, tenant_id: str, status: str | None = None, currency: str |
     if cursor:
         q = q.where(ConPackage.package_id > cursor)
     rows = list(db.execute(q.order_by(ConPackage.package_id)).scalars())
+    pre = _bulk_summary_data(db, rows) if rows else {}
     items = []
     for r in rows:
-        s = package_summary(db, r)
+        s = package_summary(db, r, pre[r.package_id])
         if needs_review is not None and (s["outstanding_review"] > 0) != needs_review:
             continue
         items.append(s)

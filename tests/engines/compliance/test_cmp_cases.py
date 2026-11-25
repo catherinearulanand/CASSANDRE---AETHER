@@ -2,12 +2,12 @@ from datetime import UTC, datetime
 
 import pytest
 from sqlalchemy import select
+from tests.engines.compliance.conftest import CTX, P
 
 from app.core.errors import Blocked, Conflict, Forbidden, NotFound, ValidationFailed
 from app.engines.compliance import cases as C
 from app.engines.compliance import engine as E
 from app.engines.compliance.models import CmpCase, CmpCaseEvent, CmpEvaluation
-from tests.engines.compliance.conftest import CTX, P
 
 AS1, AS2 = "2026-08-17T06:00:00Z", "2026-08-17T07:00:00Z"
 

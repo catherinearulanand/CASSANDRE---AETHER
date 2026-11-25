@@ -25,8 +25,8 @@ export default function AllocationView({ ctx, selected, onSelect }: { ctx: Ctx; 
     } catch (e) { setErr(e as ApiError); } finally { setPending(false); }
   }
   return (
-    <div className="grid" style={{ gridTemplateColumns: "minmax(240px, 300px) 1fr" }}>
-      <aside className="card" aria-label="Proposals">
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" }}>
+      <aside className="card" aria-label="Proposals" style={{ flex: "1 1 240px", maxWidth: 300, minWidth: 0 }}>
         <h2>Proposals</h2>
         <button className="primary" disabled={!ready || !canRun || pending} onClick={run} style={{ width: "100%" }}
           title={!canRun ? "Requires maker role" : !ready ? "Select margin result, snapshot and deadline" : ""}>{pending ? "Optimising…" : "Run optimisation"}</button>
@@ -43,7 +43,7 @@ export default function AllocationView({ ctx, selected, onSelect }: { ctx: Ctx; 
                 </button></li>))}</ul>}
         </div>
       </aside>
-      <div style={{ minWidth: 0 }}>
+      <div style={{ minWidth: 0, flex: "3 1 min(100%, 340px)" }}>
         {!selected ? <EmptyState title="Select or create a proposal">Optimise to see legs, constraints, slack, exclusions and solver status.</EmptyState>
           : detail.error ? <ErrorState error={detail.error} /> : !detail.data || detail.loading ? <EmptyState title="Loading proposal…" /> : <ProposalDetail p={detail.data} />}
       </div>

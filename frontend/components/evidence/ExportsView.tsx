@@ -38,7 +38,7 @@ export default function ExportsView({ runId, setRunId }: { runId: string; setRun
 
       <section className="card" aria-labelledby="exl-h"><h2 id="exl-h">Exports</h2>
         {list.error ? <ErrorState error={list.error} /> : list.loading ? <EmptyState title="Loading…" /> : !list.data || list.data.items.length === 0 ? <EmptyState title="No exports yet" />
-          : <div className="scroll-x"><table><thead><tr><th>Export</th><th>Run</th><th>Events</th><th>Content</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
+          : <div className="scroll-x" style={{ position: "relative" }}><table><thead><tr><th>Export</th><th>Run</th><th>Events</th><th>Content</th><th>Created</th><th><span className="sr-only">Actions</span></th></tr></thead><tbody>
             {list.data.items.map(e => <tr key={e.export_id}><td className="mono">{e.export_id.slice(0, 8)}</td><td className="mono">{e.run_id.slice(0, 8)}</td><td className="num">{e.events}</td>
               <td>{e.redacted ? <StatusChip tone="warn">Redacted</StatusChip> : <StatusChip tone="info">Full</StatusChip>}</td><td className="mono">{e.created_at}</td>
               <td><button onClick={() => open(e.export_id)}>Preview</button> <a className="btn" style={{ display: "inline-block", lineHeight: "36px", padding: "0 12px", border: "1px solid var(--border)", borderRadius: 6 }} href={`/api/v1/evidence/exports/${e.export_id}/download`}>Download</a></td></tr>)}

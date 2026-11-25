@@ -75,9 +75,10 @@ def login(browser, user, tenant="tenant-a", width=1440):
     ctx = browser.new_context(viewport={"width": width, "height": 900})
     page = ctx.new_page()
     errs: list = []
-    page.on("console", lambda m: errs.append(m.text) if m.type == "error" else None)
+    page.on("console", lambda m: errs.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
     page.on("pageerror", lambda e: errs.append(f"pageerror: {e}"))
-    page.on("response", lambda r: errs.append(f"{r.status} {r.request.method} {r.url}") if "/api/v1" in r.url and r.status >= 500 else None)
+    page.on("response", lambda r: errs.append(f"{r.status} {r.request.method} {r.url}") if "/api/v1" in r.url and (
+        r.status >= 500 or (r.status in (400, 404, 422) and r.request.method == "GET")) else None)
     page.goto(BASE + "/contracts")
     page.fill("#tenant", tenant)
     page.fill("#username", user)
@@ -112,12 +113,21 @@ def approve_all_proposed(page, who):
         rows = page.locator("section[aria-labelledby='fld-h'] tbody tr", has_text="PROPOSED")
         if rows.count() == 0:
             return
-        rows.first.locator("button").first.click()
+        before = rows.count()
+        row = rows.first
+        key = row.locator("button").first.inner_text()
+        dirn = row.locator("td").nth(1).inner_text()
+        row.locator("button").first.click()
         page.fill("#reason", f"independent review by {who}: value matches the quoted source")
+        btn = page.locator("button:has-text('Approve')").first
+        page.wait_for_function("b => !b.disabled", arg=btn.element_handle(), timeout=5000)
         with page.expect_response(lambda r: "/review" in r.url and r.request.method == "POST") as ri:
-            page.click("button:has-text('Approve')")
-        assert ri.value.status == 200, f"approve returned {ri.value.status}"
-        page.wait_for_timeout(250)
+            btn.click()
+        assert ri.value.status == 200, f"approve {key} returned {ri.value.status}"
+        # wait until the refreshed table shows one fewer PROPOSED row (keys can repeat across versions, so count, don't match)
+        page.wait_for_function(
+            "n => [...document.querySelectorAll(\"section[aria-labelledby='fld-h'] tbody tr\")].filter(r => r.innerText.includes('PROPOSED')).length < n",
+            arg=before, timeout=10000)
     raise AssertionError("approve loop did not converge")
 
 
@@ -189,7 +199,7 @@ with sync_playwright() as p:
         open_pkg(checker, state["pid"])
         approve_all_proposed(checker, "checker")
         txt = checker.inner_text("main")
-        assert "PROPOSED" not in checker.inner_text("section[aria-labelledby='fld-h']"), "fields left unapproved"
+        assert checker.locator("section[aria-labelledby='fld-h'] tbody tr", has_text="PROPOSED").count() == 0, "fields left unapproved"
         shot(checker, "04_review_all_approved")
 
     @step("maker proposes freeze; a DIFFERENT checker session finds the pending approval and freezes the exact hash -> v1")

@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
+from tests.engines.compliance.conftest import CTX
 
 from app.core import services
 from app.core.events import dispatch_once, emit
@@ -11,9 +12,8 @@ from app.engines.compliance import cases as C
 from app.engines.compliance import controls as K
 from app.engines.compliance import engine as E
 from app.engines.compliance import schedule as SCH
-from app.engines.compliance.models import CmpCase, CmpEvaluation, CmpJob
+from app.engines.compliance.models import CmpEvaluation
 from app.engines.evidence.models import EvEvent
-from tests.engines.compliance.conftest import CTX, P
 
 ASOF = datetime(2026, 8, 17, 4, 0, tzinfo=UTC)
 FRESH = "2026-08-17T03:00:00Z"
@@ -240,15 +240,15 @@ def test_evidence_parents_and_replay_hash_match_and_detect_drift(db, tenant, up)
     r = ev(db, tenant, margin_result_id="MR-1", allocation_id="PROP-7")
     evid = by(r)["CMP-COV-ETD-INR"]["evaluation_id"]
     rows = db.execute(select(EvEvent).where(EvEvent.tenant_id == tenant, EvEvent.entity_id == evid)).scalars().all()
-    assert len(rows) == 1 and rows[0].entity_type == "control_evaluation" and rows[0].action == "CONTROL_EVALUATED"
+    assert len(rows) == 1 and rows[0].entity_type == "cmp_evaluation" and rows[0].action == "CONTROL_EVALUATED"
     parents = {(p["entity_type"], p["entity_id"]) for p in rows[0].payload["parents"]}
-    assert parents == {("risk_result", "MR-1"), ("allocation_proposal", "PROP-7")}
+    assert parents == {("risk_result", "MR-1"), ("col_proposal", "PROP-7")}
     spec = rows[0].payload["replay"]
     assert spec["replayer"] == "replay.compliance" and spec["engine_version"] and spec["method_version"] and len(spec["business_hash"]) == 64
     assert spec["business_hash"] == rows[0].output_hash and "evaluation_id" in spec["inputs"]
     case = next(c for c in db.execute(select(EvEvent).where(EvEvent.tenant_id == tenant, EvEvent.action == "CASE_OPENED")).scalars()
                 if c.payload["evaluation_id"] == evid)
-    assert case.payload["parents"] == [{"entity_type": "control_evaluation", "entity_id": evid}]
+    assert case.payload["parents"] == [{"entity_type": "cmp_evaluation", "entity_id": evid}]
     # read-only replay through VERITAS: MATCH
     rep = services.call("evidence.replay_run", db, tenant, "run-x", rows[0].correlation_id, "auditor-1")
     items = [i for i in rep["items"] if i["engine"] == "compliance"]

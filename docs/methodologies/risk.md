@@ -57,3 +57,12 @@ cache hits. Evidence is appended in the same DB transaction as every write (`SNA
 ## Known limitations
 No holiday calendars; no stubs; single-currency-per-leg vanilla IRS only; no exotics; no QuantLib cross-check (not installed); IM is demonstrative only; PostgreSQL and
 SQLite row-lock behaviour differ and only SQLite was exercised here; the numeric benchmark covers SQLite only.
+
+## Round 2 additions (contract v1.1)
+
+- `MarginResult.as_of` (business time) and `snapshot_as_of` (the pinned snapshot's own data time; null when unknown). Bitemporal: the OTC desk passes `known_at` (recording time of terms resolution, returned by `/risk/terms/resolve`).
+- `risk.get_positions(account, as_of)`: gross/net lots, notional, delta-equivalent lots; unknown values are `null` with a warning, never zero; `client_class` is always `UNKNOWN` (not an input of this engine). Expired options give null notional/delta with an explicit expiry reason.
+- `risk.reconciliation_status(account, as_of)`: recomputed from stored rows; `OK`, `EXCEPTION`, or `UNKNOWN` (no file, or no reported total).
+- Evidence: each OK result event carries `payload.parents` (snapshot, clearing file, terms hash, rule set) and `payload.replay`; replayer `replay.risk` recomputes with the cache bypassed and the original trades / clearing-file revision pinned. The business hash excludes run identity and the float internal estimate, which is compared with tolerance 0.01.
+- Result cache: partial unique index `(tenant_id, cache_key) WHERE status IN ('OK','UNSUPPORTED')`; concurrent identical computes return the winner's immutable result and write one event.
+- Numerics: normal CDF uses `erfc` (the previous `0.5*(1+erf)` cancelled to exactly 0.0 for d1 < about -8). Float BSM is reconciled in tests to an independent adaptive-precision Decimal oracle (validated against mpmath for pi).

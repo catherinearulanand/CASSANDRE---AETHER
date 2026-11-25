@@ -84,6 +84,10 @@ def validate_schedule(rows: Any, base_ccy: str) -> tuple[list[str], list[dict]]:
         ac = str(r.get("asset_class", "")).strip().upper()
         ccy = r.get("currency")
         iss = str(r.get("issuer_class", "")).strip().upper()
+        if len(ac) > 40:
+            errs.append(f"{p}: asset_class longer than 40 characters")
+        if len(iss) > 40:
+            errs.append(f"{p}: issuer_class longer than 40 characters")
         if not ac:
             errs.append(f"{p}: asset_class missing")
         if ccy not in SUPPORTED_CURRENCIES:
@@ -117,6 +121,9 @@ def validate_schedule(rows: Any, base_ccy: str) -> tuple[list[str], list[dict]]:
                     errs.append(f"{p}: max_maturity_years must be positive")
             except NumericError as e:
                 errs.append(str(e))
+        for nm, v in (("valuation_pct", val), ("haircut_pct", hc), ("fx_haircut_pct", fx), ("concentration_cap_pct", cap_d), ("max_maturity_years", mm_d)):
+            if v is not None and len(dstr(v)) > 20:
+                errs.append(f"{p}: {nm} has more than 20 characters after normalisation")
         key = (ac, ccy, iss)
         if key in seen:
             errs.append(f"{p}: duplicate row for {key}")

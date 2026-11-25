@@ -56,7 +56,7 @@ export default function ApprovalPanel({ proposalId }: { proposalId: string }) {
   const confirmBody = (
     <div>
       <p className="muted">You are acting as <strong>{principal?.username}</strong> ({roles.join(", ")}). Proposal made by <span className="mono">{p.maker_id}</span>.</p>
-      <div className="scroll-x"><table><caption className="sr-only">Before and after</caption>
+      <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Before and after</caption>
         <thead><tr><th scope="col">Item</th><th scope="col" className="r">Before</th><th scope="col" className="r">After</th></tr></thead>
         <tbody>
           <tr><td>Proposal state</td><td className="r">{p.state}</td><td className="r">{act === "approve" ? "APPROVED" : act === "reserve" ? "RESERVED" : act === "cancel" ? "CANCELLED" : act === "draft" ? "DRAFTED" : "SIMULATED SETTLED"}</td></tr>
@@ -117,7 +117,7 @@ export default function ApprovalPanel({ proposalId }: { proposalId: string }) {
               <div>
                 <p className="mono">{instr.data.content.watermark}</p>
                 <p className="mono faint">content hash {instr.data.content_hash}</p>
-                <div className="scroll-x"><table><caption className="sr-only">Draft legs</caption><thead><tr><th scope="col">Lot</th><th scope="col" className="r">Quantity</th><th scope="col" className="r">Effective coverage ({cur})</th></tr></thead>
+                <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Draft legs</caption><thead><tr><th scope="col">Lot</th><th scope="col" className="r">Quantity</th><th scope="col" className="r">Effective coverage ({cur})</th></tr></thead>
                   <tbody>{(instr.data.content.legs as { lot_id: string; quantity: string; effective_coverage: string }[]).map(l => (
                     <tr key={l.lot_id}><td className="mono">{l.lot_id}</td><td className="r num">{fmt(l.quantity)}</td><td className="r num">{fmt(l.effective_coverage)}</td></tr>))}</tbody></table></div>
                 <div className="row" style={{ marginTop: 8 }}>
@@ -131,7 +131,7 @@ export default function ApprovalPanel({ proposalId }: { proposalId: string }) {
       <section className="card" style={{ marginTop: 16 }} aria-labelledby="rev">
         <h2 id="rev">Recommended legs (this revision)</h2>
         {legs.length === 0 ? <EmptyState title="No legs" /> : (
-          <div className="scroll-x"><table><caption className="sr-only">Legs</caption><thead><tr><th scope="col">Lot</th><th scope="col" className="r">Quantity</th><th scope="col" className="r">Effective coverage</th><th scope="col" className="r">Horizon cost</th></tr></thead>
+          <div className="scroll-x" tabIndex={0} role="region" aria-label="Scrollable table"><table><caption className="sr-only">Legs</caption><thead><tr><th scope="col">Lot</th><th scope="col" className="r">Quantity</th><th scope="col" className="r">Effective coverage</th><th scope="col" className="r">Horizon cost</th></tr></thead>
             <tbody>{legs.map(l => <tr key={l.lot_id}><td className="mono">{l.lot_id}</td><td className="r num">{fmt(l.quantity)}</td><td className="r num">{fmt(l.effective_coverage)}</td><td className="r num">{fmt(l.cost_horizon)}</td></tr>)}</tbody></table></div>)}
         <p className="faint">Total horizon cost {p.objective ? <MoneyDisplay amount={p.objective} currency={cur} signed={false} /> : "—"} (not annualised; modelled, not realised).</p>
       </section>

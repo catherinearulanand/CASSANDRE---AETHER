@@ -1,0 +1,192 @@
+{
+ "base": "http://localhost:3104",
+ "checks": [
+  {
+   "check": "setup: fresh OTC inventory imported for this run",
+   "ok": true,
+   "detail": "{\"snapshot_id\":\"INV-OTC-06d8efc6\",\"as_of\":\"2026-08-17T04:00:00+00:00\",\"currency\":\"USD\",\"market_type\":\"OTC\",\"content_hash\":\"9a7a7f67e4104c7e64991303c54415eee438aa982eaa06c038c896a3792e7bfd\",\"lot_count\":4,\"provenance\":\"SYNTHETIC\",\"has_policy\":false,\"wrong_way_issuer_groups\":[\"IG-NORTHWIND\"],\"replayed\""
+  },
+  {
+   "check": "F1 hypothetical G01: UI shows HYPOTHETICAL marker",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F1 hypothetical G01: required coverage is exactly 1,000,000 INR (12.5m - 11.5m posted)",
+   "ok": true,
+   "detail": "Collateral & Liquidity (ATLAS)\n!\nRecommendation only \u2014 no collateral is posted, moved or transmitted. Reserved \u2260 posted. Simulated settlement is labelled SIMULATED.\nMargin result ID (from Risk & Margi"
+  },
+  {
+   "check": "F1 approve button disabled for hypothetical proposal",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F1 UI explains why (note + tooltip)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F1 server refuses approval of hypothetical proposal (403 NOT_APPROVABLE)",
+   "ok": true,
+   "detail": "{\"code\":\"NOT_APPROVABLE\",\"message\":\"Stress runs and proposals derived from a HYPOTHETICAL margin result can never be approved or reserved\",\"field_errors\":{},\"correlation_id\":\"c5f71c94-5d5b-475f-8a64-32696cadda8a\",\"retryable\":false}"
+  },
+  {
+   "check": "F2 OTC G03: required coverage 9,500,000 USD",
+   "ok": true,
+   "detail": "Collateral & Liquidity (ATLAS)\n!\nRecommendation only \u2014 no collateral is posted, moved or transmitted. Reserved \u2260 posted. Simulated settlement is labelled SIMULATED.\nMargin result ID (from Risk & Margi"
+  },
+  {
+   "check": "F2 OTC: solver optimal + CHECKED + NOT TRANSMITTED visible",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 OTC: no feasible baseline (cash 6.0m < 9.5m call, other lots breach CSA caps) -> explicit 'No savings figure', no card",
+   "ok": true,
+   "detail": "UNAVAILABLE"
+  },
+  {
+   "check": "F2 independent re-check: sum(effective coverage of legs) >= required",
+   "ok": true,
+   "detail": "9500000.000092"
+  },
+  {
+   "check": "F2 independent re-check: every leg within inventory",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 wrong-way lot never allocated",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 maker (also a checker role) sees Approve disabled on own proposal",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 server refuses self-approval (403 SELF_APPROVAL)",
+   "ok": true,
+   "detail": "{\"code\":\"SELF_APPROVAL\",\"message\":\"Maker cannot approve their own work (independent checker required)\",\"field_errors\":{},\"correlation_id\":\"07265379-e380-4d90-8e59-11e748045906\",\"retryable\":false}"
+  },
+  {
+   "check": "F2 checker approval succeeds and state becomes APPROVED",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 second (stale) approval gets an explicit conflict message",
+   "ok": true,
+   "detail": "REVISION_CONFLICT: Proposal revision is 3, request expected 2; reload\ncorrelation_id 18172b89-051a-4c40-ab25-8ad0457ba110"
+  },
+  {
+   "check": "F2 conflicted view reloads to the latest revision (APPROVED)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 exactly one COLLATERAL_PROPOSAL_APPROVED evidence event",
+   "ok": true,
+   "detail": "['COLLATERAL_PROPOSAL_APPROVED', 'COLLATERAL_PROPOSAL_CHECKED', 'COLLATERAL_PROPOSAL_CREATED']"
+  },
+  {
+   "check": "F2 reservation succeeds -> RESERVED (reserved is not posted)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 competing reservation refused (STALE_INVENTORY/RESERVATION_CONFLICT), nothing double-pledged",
+   "ok": true,
+   "detail": "STALE_INVENTORY: Current inventory no longer satisfies the constraints: leg CASH-USD-OTC: inventory (qty <= available); leg GSEC-USD-OTC: inventory (qty <= available)\ncorrelation_id 5e764e19-e46e-413d-97b0-a963c2688e44"
+  },
+  {
+   "check": "F2 no lot is over-reserved",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 draft shows NOT TRANSMITTED watermark",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 downloaded draft file is watermarked + NOT_TRANSMITTED",
+   "ok": true,
+   "detail": "instruction-draft-a15a87ed-NOT_TRANSMITTED.json"
+  },
+  {
+   "check": "F2 simulated settlement is clearly labelled SIMULATED",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F2 evidence trail contains every step in order",
+   "ok": true,
+   "detail": "['COLLATERAL_PROPOSAL_CREATED', 'COLLATERAL_PROPOSAL_CHECKED', 'COLLATERAL_PROPOSAL_APPROVED', 'COLLATERAL_APPROVAL_RECORDED', 'COLLATERAL_RESERVED', 'COLLATERAL_INSTRUCTION_DRAFTED', 'COLLATERAL_SIMULATED_SETTLED']"
+  },
+  {
+   "check": "F3 setup: small inventory imported",
+   "ok": true,
+   "detail": "{\"snapshot_id\":\"INV-G07-20ef3c\",\"as_of\":\"2026-08-17T04:00:00+00:00\",\"currency\":\"USD\",\"market_type\":\"OTC\",\"content_hash\":\"8bb3dc8a1a94ec0889ae31c5dff150f0f4331c079bbf2ccbeb80a185702bf777\",\"lot_count\":1,\"provenance\":\"SYNTHETIC\",\"has_policy\":false,\"wrong_way_issuer_groups\":[\"IG-NORTHWIND\"],\"replayed\":f"
+  },
+  {
+   "check": "F3 G07 infeasible: UI states INFEASIBLE with the shortfall",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F3 no savings/baseline comparison card for an infeasible case",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F3 infeasible: approve disabled and no instruction draft offered",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F3 server refuses a draft for an infeasible proposal (409)",
+   "ok": true,
+   "detail": "{\"code\":\"ILLEGAL_TRANSITION\",\"message\":\"An instruction can only be drafted for a RESERVED, feasible proposal (state is INFEASIBLE)\",\"field_errors\":{},\"correlation_id\":\"6cd4f4ac-68b1-496d-97b2-47d8dc3f2125\",\"retryable\":false}"
+  },
+  {
+   "check": "F4 zero call: no allocation, explicit 'No additional collateral required'",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F5 stress lab result is labelled HYPOTHETICAL",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F5 stress never moves or reserves assets",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F6 viewer cannot run optimisation (button disabled)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F6 server refuses viewer optimise (403)",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "check": "F6 tenant B gets 404 for tenant A's proposal (no leakage)",
+   "ok": true,
+   "detail": "404"
+  },
+  {
+   "check": "F6 tenant B gets 404 for tenant A's instruction draft",
+   "ok": true,
+   "detail": "404"
+  }
+ ],
+ "passed": 37,
+ "failed": 0
+}

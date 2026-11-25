@@ -1,0 +1,229 @@
+{
+  "engine": "ATLAS collateral",
+  "target": "p95 < 2 s for 1,000 eligible continuous lots (solver + independent feasibility)",
+  "environment": {
+    "os": "Windows-11-10.0.26200-SP0",
+    "cpu": "Intel64 Family 6 Model 140 Stepping 2, GenuineIntel",
+    "cpu_count": 8,
+    "ram_gb": 15.8,
+    "python": "3.14.3",
+    "scipy": "1.18.0",
+    "numpy": "2.4.3",
+    "solver": {
+      "solver": "HiGHS",
+      "highs_version": "1.15.1",
+      "scipy_version": "1.18.0",
+      "numpy_version": "2.4.3",
+      "feasibility_tolerance": 1e-07,
+      "tie_break_tolerance": 1e-12
+    },
+    "db": "PostgreSQL 16.16 (Debian 16.16-1.pgdg13+1) on x86_64-pc-linux-gnu (Docker, 127.0.0.1:5433, local loopback)",
+    "network": "none (loopback)",
+    "machine_load_before": {
+      "cpu_percent_total": 76.2,
+      "cpu_percent_max_core": 88.4,
+      "top_processes_cpu": [
+        [
+          0,
+          "wslservice.exe"
+        ],
+        [
+          0,
+          "wslrelay.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ],
+        [
+          0,
+          "wslhost.exe"
+        ]
+      ],
+      "mem_used_percent": 90.1
+    },
+    "machine_load_after": {
+      "cpu_percent_total": 88.2,
+      "cpu_percent_max_core": 95.9,
+      "top_processes_cpu": [
+        [
+          93.3,
+          "System Idle Process"
+        ],
+        [
+          85.0,
+          "python.exe"
+        ],
+        [
+          83.8,
+          "OneDrive.exe"
+        ],
+        [
+          31.0,
+          "System"
+        ],
+        [
+          28.0,
+          "python.exe"
+        ]
+      ],
+      "mem_used_percent": 95.0
+    },
+    "commit": "8199e077299173fe1ce687bf88b522cc40142da5",
+    "uncommitted_changes_possible": true
+  },
+  "data": {
+    "tier": "DEMO-like single pool",
+    "lots_total": 1000,
+    "eligible_lots": 1000,
+    "seed": 42,
+    "required_coverage": "26967829",
+    "caps": 121,
+    "generator": "scripts/bench_collateral.py gen_lots"
+  },
+  "method": {
+    "warmups": 5,
+    "measured_reps": 30,
+    "cold": "30 fresh subprocesses, first call each",
+    "concurrency": 1
+  },
+  "results": {
+    "pipeline_warm (solve+round+verify+baseline)": {
+      "n": 30,
+      "p50_s": 0.8465,
+      "p95_s": 0.9799,
+      "p99_s": 1.0017,
+      "mean_s": 0.8438,
+      "min_s": 0.5735,
+      "max_s": 1.009
+    },
+    "solver_only_warm": {
+      "n": 30,
+      "p50_s": 0.6839,
+      "p95_s": 0.8229,
+      "p99_s": 0.8353,
+      "mean_s": 0.6869,
+      "min_s": 0.493,
+      "max_s": 0.8382
+    },
+    "service_optimise_end_to_end_warm (DB+eligibility+pipeline+persist+evidence)": {
+      "n": 30,
+      "p50_s": 1.6338,
+      "p95_s": 2.4884,
+      "p99_s": 2.6923,
+      "mean_s": 1.7521,
+      "min_s": 1.3052,
+      "max_s": 2.7062
+    },
+    "pipeline_cold_s": [
+      0.9434,
+      0.7217,
+      1.0886,
+      0.7099,
+      0.5725,
+      0.571,
+      0.3713,
+      0.7455,
+      1.0923,
+      1.0513,
+      0.8354,
+      1.0438,
+      0.9267,
+      1.4021,
+      1.0439,
+      0.7594,
+      0.3522,
+      0.4344,
+      0.8507,
+      0.8376,
+      0.9889,
+      0.6426,
+      0.7359,
+      0.7156,
+      0.7799,
+      0.8064,
+      0.8484,
+      2.1233,
+      0.8341,
+      0.9145
+    ],
+    "cold_incl_import_and_setup_s": [
+      3.749,
+      3.6444,
+      4.0695,
+      3.2496,
+      3.2082,
+      3.1024,
+      2.8095,
+      3.1469,
+      6.5559,
+      5.9532,
+      5.1905,
+      3.8986,
+      3.6379,
+      5.7354,
+      5.8171,
+      3.4692,
+      2.8114,
+      2.8644,
+      3.5684,
+      4.7712,
+      7.2444,
+      3.2073,
+      6.1174,
+      4.2256,
+      4.8718,
+      3.5662,
+      5.2801,
+      9.655,
+      5.889,
+      4.0728
+    ],
+    "pipeline_cold": {
+      "n": 30,
+      "p50_s": 0.8347,
+      "p95_s": 1.2627,
+      "p99_s": 1.9142,
+      "mean_s": 0.8581,
+      "min_s": 0.3522,
+      "max_s": 2.1233
+    },
+    "service_cold_first_call_fresh_process": {
+      "n": 30,
+      "p50_s": 2.4763,
+      "p95_s": 3.0571,
+      "p99_s": 3.3417,
+      "mean_s": 2.5058,
+      "min_s": 2.08,
+      "max_s": 3.4566
+    },
+    "service_cold_outcomes": [
+      [
+        "CHECKED",
+        "optimal"
+      ]
+    ],
+    "inventory_import_once_s": 1.777
+  },
+  "failures": {
+    "pipeline_failures_or_unverified": 0,
+    "service_outcomes": [
+      [
+        "optimal",
+        "CHECKED"
+      ]
+    ]
+  },
+  "target_met": {
+    "pipeline_warm_p95_lt_2s": true,
+    "service_warm_p95_lt_2s": false
+  },
+  "notes": [
+    "Engineering target, not an SLA; numbers apply to this machine/run only.",
+    "Failed or slow measurements are retained in the aggregates, not discarded."
+  ]
+}

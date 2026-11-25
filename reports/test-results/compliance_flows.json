@@ -1,0 +1,172 @@
+{
+ "total": 33,
+ "passed": 33,
+ "failed": 0,
+ "checks": [
+  {
+   "check": "F1 G01 FAIL with gap 1,000,000 INR from real risk + collateral services",
+   "ok": true,
+   "detail": "['CMP-COV-ETD-INR', '\u2715\\nFAIL', '11,500,000 INR', '12,500,000 INR', '1,000,000 INR', 'condition FALSE \u00b7 open case']"
+  },
+  {
+   "check": "F1 IFSC coverage control reports NOT APPLICABLE (never silently skipped)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F1 exactly one case opened",
+   "ok": true,
+   "detail": "1"
+  },
+  {
+   "check": "F1 case is flagged hypothetical",
+   "ok": true,
+   "detail": "[HYPOTHETICAL] CMP-COV-ETD-INR FAIL for ACC-DEMO-NSE-001"
+  },
+  {
+   "check": "F1 case page: trace, measured vs limit, rule hash, hypothetical banner",
+   "ok": true,
+   "detail": "Compliance & Surveillance (SENTINEL)\n\nApproved controls are evaluated deterministically; UNKNOWN is never PASS and an empty alert list is not compliance. Statistical anomalies are investigation signal"
+  },
+  {
+   "check": "F1 hypothetical outcomes excluded from official counts",
+   "ok": true,
+   "detail": "{'registered': 10, 'supported': 10, 'unsupported': 0, 'supported_and_evaluated': 0, 'supported_not_evaluated': 10, 'subject_evaluations': 0, 'latest_status_counts': {'PASS': 0, 'FAIL': 0, 'UNKNOWN': 0, 'NOT_APPLICABLE': 0, 'CONFLICT': 0, 'ERROR': 0}, 'unknown_count': 0, 'hypothetical_evaluations': 2, 'hypothetical_status_counts': {'FAIL': 1, 'NOT_APPLICABLE': 1}, 'note': 'No generic compliance per"
+  },
+  {
+   "check": "F2 reconciliation from risk.reconciliation_status is PASS",
+   "ok": true,
+   "detail": "['CMP-RECON-ETD', '\u2713\\nPASS', '\u2014', '\u2014', '\u2014', 'condition TRUE']"
+  },
+  {
+   "check": "F2 position limit is UNKNOWN (client classification not provided by any engine), never PASS",
+   "ok": true,
+   "detail": "CMP-POSLIMIT-ETD !\nUNKNOWN \u2014 \u2014 \u2014 scope cannot be decided: required context missing (e.g. entity/client classification); CLIENT_CLASSIFICATION_MISSING \u00b7 open case"
+  },
+  {
+   "check": "F3 wildcard waiver subject refused",
+   "ok": true,
+   "detail": "VALIDATION_FAILED: a waiver must name one exact subject (no wildcards)\nsubject_id: required, exact\ncorrelation_id 37a59885-8f67-4eec-813f-0b52e207ff96"
+  },
+  {
+   "check": "F3 requester sees PENDING waiver awaiting independent checker",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F3 waiver ACTIVE for exactly one control+subject, valid_to set",
+   "ok": true,
+   "detail": "{'waiver_id': 'e4cf144c-366d-4aa4-92a4-7e06f7a94c2a', 'control_key': 'CMP-COV-ETD-INR', 'subject_id': 'ACC-DEMO-NSE-001', 'reason': 'temporary exemption approved by desk head', 'status': 'ACTIVE', 'valid_from': '2026-08-17T00:00:00+00:00', 'valid_to': '2026-08-19T00:00:00+00:00', 'requested_by': '7b898af5-cfad-4c5e-b56a-2772ad933e81', 'approved_by': '8e397988-3cb8-4dd6-a7d3-ba73d182d0d2', 'scope_n"
+  },
+  {
+   "check": "F4 official FAIL: required 10,000,000 vs posted 9,500,000 (after posted collateral reduced)",
+   "ok": true,
+   "detail": "['CMP-COV-ETD-INR', '\u2715\\nFAIL', '9,500,000 INR', '10,000,000 INR', '500,000 INR', 'condition FALSE \u00b7 open case']"
+  },
+  {
+   "check": "F4 official case opened, separate from the hypothetical one",
+   "ok": true,
+   "detail": "['664334d6-50d5-40b5-90c2-266d63855897']"
+  },
+  {
+   "check": "F4 active waiver annotates the case but raw status stays FAIL",
+   "ok": true,
+   "detail": "e4cf144c-366d-4aa4-92a4-7e06f7a94c2a"
+  },
+  {
+   "check": "F4 case page shows waiver as annotation only",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F4 remediation proposal recorded as option+consequence only (nothing executed)",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F4 case is REVIEW_REQUIRED",
+   "ok": true,
+   "detail": "REVIEW_REQUIRED"
+  },
+  {
+   "check": "F4 resolve refused without a fresh recheck",
+   "ok": true,
+   "detail": "Review and resolution"
+  },
+  {
+   "check": "F4 recheck while posting incomplete shows FAIL, still not clear",
+   "ok": true,
+   "detail": "Review and resolution"
+  },
+  {
+   "check": "F4 resolve refused when latest recheck is not PASS",
+   "ok": true,
+   "detail": "Review and resolution"
+  },
+  {
+   "check": "F4 recheck after simulated posting is PASS (posted 12,500,000 >= 10,000,000)",
+   "ok": true,
+   "detail": "{'evaluation_id': 'd8af1592-8d90-4e73-9a6f-914546723425', 'status': 'PASS', 'as_of': '2026-08-17T07:30:00+00:00', 'snapshot_id': 'SNAP-ETD-001'}"
+  },
+  {
+   "check": "F4 case RESOLVED only after verified recheck + independent checker",
+   "ok": true,
+   "detail": "RESOLVED"
+  },
+  {
+   "check": "F5 maker sees they cannot approve their own request",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F5 maker self-approval refused",
+   "ok": true,
+   "detail": "Review and resolution"
+  },
+  {
+   "check": "F5 independent checker approved: DISMISSED, raw status unchanged",
+   "ok": true,
+   "detail": "{'kind': 'DISMISSED', 'reason': 'independent confirmation: what-if only', 'requested_by': '7b898af5-cfad-4c5e-b56a-2772ad933e81', 'approved_by': '2828443b-0c9f-4bfb-96a4-030c160fc0bd', 'approval_id': 'eb20fa89-885e-40fe-b20a-c72376e6f1ba', 'bound_hash': '62c79cb62e4a8bb99b1aae2736e5901b685014bd7310e23820cf4c5b82905499', 'note': 'Dismissal does not change any raw control evaluation status'}"
+  },
+  {
+   "check": "F6 surveillance shows model card, metrics and the not-an-accusation disclaimer",
+   "ok": true,
+   "detail": "Compliance & Surveillance (SENTINEL)\n\nApproved controls are evaluated deterministically; UNKNOWN is never PASS and an empty alert list is not compliance. Statistical anomalies are investigation signal"
+  },
+  {
+   "check": "F6 no accusatory language in the surveillance view",
+   "ok": true,
+   "detail": ""
+  },
+  {
+   "check": "F6 anomaly cases are INVESTIGATION kind with low/medium severity only",
+   "ok": true,
+   "detail": "7"
+  },
+  {
+   "check": "F6 anomaly case page labelled as investigation signal; no deterministic recheck offered",
+   "ok": true,
+   "detail": "Compliance & Surveillance (SENTINEL)\n\nApproved controls are evaluated deterministically; UNKNOWN is never PASS and an empty alert list is not compliance. Statis"
+  },
+  {
+   "check": "F7 missed runs for 2026-08-18..20 are reported (not silently skipped)",
+   "ok": true,
+   "detail": "Scheduled evaluation (daily controls)\nBusiness as-of (UTC) \u2014 explicit clock\n\nA slot is due at 12:00Z + 2h grace on its business date (fictional close, not an exchange schedule). A sweep re-reads inputs from the owning engines; stale inputs evaluate to UNKNOWN, never PASS.\n\n\u2715\n3 MISSED SCHEDULED RUN(S"
+  },
+  {
+   "check": "F8 viewer cannot evaluate (403)",
+   "ok": true,
+   "detail": "403"
+  },
+  {
+   "check": "F8 stale revision / illegal transition refused with a typed error",
+   "ok": true,
+   "detail": "409"
+  },
+  {
+   "check": "F8 viewer sees the evaluate form disabled",
+   "ok": true,
+   "detail": ""
+  }
+ ]
+}

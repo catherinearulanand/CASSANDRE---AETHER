@@ -34,7 +34,7 @@ export default function Registry({ selected, onSelect, refreshKey }: { selected:
       </div>
       {err ? <ErrorState error={err} /> : !items ? <EmptyState title="Loading agreements…" /> : items.length === 0
         ? <EmptyState title="No agreements match">Create a package via the API (POST /contracts/packages) or seed synthetic fixtures.</EmptyState>
-        : <div className="scroll-x"><table>
+        : <div className="scroll-x" role="region" tabIndex={0} aria-label="Agreement registry table (scrollable)"><table>
           <caption className="sr-only">Bilateral agreement packages</caption>
           <thead><tr><th>Netting set</th><th>Master / CSA</th><th>Party A vs Party B</th><th>Ccy</th><th>Status</th><th>Docs</th><th>Review queue</th><th>Version</th><th>Trades</th></tr></thead>
           <tbody>{items.map(p => (

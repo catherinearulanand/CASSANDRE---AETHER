@@ -40,7 +40,7 @@ function Trace({ data, runId }: { data: Lineage; runId: string }) {
                 {n.stage === "SPAN" && !spanText(n) && <p className="faint" style={{ margin: "6px 0 0" }}>Source span id recorded; the quoted text is held by the owning engine and was not copied into the evidence event.</p>}
                 {parents(n.node_id).length > 0 && <p className="muted" style={{ margin: "6px 0 0" }}>Derived from: <span className="mono">{parents(n.node_id).join(", ")}</span></p>}
                 {n.events.length > 0 && <ul className="mono" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{n.events.map(e => (
-                  <li key={e.sequence}><Link href={runId ? `/evidence?run=${runId}&seq=${e.sequence}` : `/evidence?seq=${e.sequence}`}>seq {e.sequence}</Link> · {e.engine} · {e.action} · {e.recorded_at}</li>))}</ul>}
+                  <li key={e.sequence}><Link style={{ textDecoration: "underline" }} href={runId ? `/evidence?run=${runId}&seq=${e.sequence}` : `/evidence?seq=${e.sequence}`}>seq {e.sequence}</Link> · {e.engine} · {e.action} · {e.recorded_at}</li>))}</ul>}
               </li>))}
           </ol>)}
       </section>
@@ -63,7 +63,7 @@ export default function LineageView({ runId, setRunId, entityId }: { runId: stri
         ent.data && !ent.data.found ? <EmptyState title="No evidence references this id">{ent.data.message}</EmptyState> : ent.data && ent.data.lineage && (
           <>
             {ent.data.decisions.length > 1 && <div className="card"><h2>Decisions referencing this id</h2><ul>
-              {ent.data.decisions.map(d => <li key={d.correlation_id} className="mono">{d.match} · {d.run_id ? <Link href={`/evidence?run=${d.run_id}`}>run {d.run_id.slice(0, 8)}</Link> : `correlation ${d.correlation_id.slice(0, 8)} (no run)`}</li>)}</ul></div>}
+              {ent.data.decisions.map(d => <li key={d.correlation_id} className="mono">{d.match} · {d.run_id ? <Link style={{ textDecoration: "underline" }} href={`/evidence?run=${d.run_id}`}>run {d.run_id.slice(0, 8)}</Link> : `correlation ${d.correlation_id.slice(0, 8)} (no run)`}</li>)}</ul></div>}
             <Trace data={ent.data.lineage} runId={ent.data.lineage.run_id ?? ""} />
           </>)
       ) : run.data && <Trace data={run.data} runId={runId} />}

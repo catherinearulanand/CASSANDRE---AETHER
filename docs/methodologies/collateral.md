@@ -66,3 +66,12 @@ Cancel/expiry release reservations. Evidence is appended in the same transaction
 ## 9. Gate evidence (tests in `tests/engines/collateral/`, expected values in `fixtures/expected/collateral/golden.json`)
 A-A01 `test_g05…`, `test_lp_vs_exhaustive_grid…` · A-A02 verifier + property test · A-A03 G01/G12 exclusions · A-A04 cap + G06 tests ·
 A-A05 `test_g07…` · A-A06 zero-call/RETURN · A-A07 stale/expired approval · A-A08 `test_g13…` (threads) · A-A09 cost/baseline tests · A-A10 UI implemented, not browser-verified.
+
+## Round 2 additions
+
+* **Evidence/lineage**: events use entity types `allocation_proposal`, `inventory_snapshot`, `approval`; parents `risk_result`, `inventory_snapshot`, `rule_set`, `terms` in VERITAS format `{entity_type, entity_id}`.
+* **Replay (`replay.collateral`)**: recomputes from persisted inputs incl. the availability the original run saw (`params.availability`); compares the business hash (= `proposal_hash`: input hashes, required, horizon, deadline, stress, rounded legs) and objective/residual within declared tolerance 0.000001. `method_version` pins `collateral-lp/1 highspy/<version>`; a different solver version => NOT_REPLAYABLE. Read-only (VERITAS savepoint rollback; test asserts no reservation/proposal/evidence rows change).
+* **`collateral.constraint_slacks`**: `{name, kind, limit, used, slack, binding, unit}` per stored constraint; empty list for infeasible proposals.
+* **Concurrency**: every mutator takes a proposal row lock before any state/revision check; reservation is one conditional UPDATE inside a savepoint (all-or-nothing, lot_id lock order); first inventory import of the same snapshot id is race-safe.
+* **Vocabulary mapping** (until frozen in CONTRACTS): contract `GOVERNMENT_BOND→GSEC`, `CORPORATE_BOND→CORP`, cap denominator `TOTAL_EFFECTIVE_ALLOCATED→TOTAL_ALLOCATED`, issuer class `ANY` = wildcard. Each mapping is shown as a `VOCABULARY_NORMALISED` warning; unknown values are rejected, never coerced.
+* **Indivisible lots (P1)**: MILP whole blocks; coverage window [R, R+largest block]; optimal checked against exhaustive enumeration; repair never labelled optimal.

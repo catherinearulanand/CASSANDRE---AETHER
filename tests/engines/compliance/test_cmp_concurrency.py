@@ -2,12 +2,12 @@ import threading
 import time
 
 from sqlalchemy import func, select
+from tests.engines.compliance.conftest import CTX, P
 
 from app.db.base import SessionLocal
 from app.engines.compliance import cases as C
 from app.engines.compliance import engine as E
 from app.engines.compliance.models import CmpCase, CmpEvaluation
-from tests.engines.compliance.conftest import CTX, P
 
 
 def test_concurrent_events_for_same_failure_yield_one_case_and_exact_count(tenant, up):

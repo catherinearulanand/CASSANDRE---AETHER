@@ -157,7 +157,8 @@ export default function Workbench({ initialDoc, initialSpan, openRule }: { initi
   const draftSpans = active && !candSpans.includes(active) ? [...candSpans, active] : candSpans.length ? candSpans : active ? [active] : [];
 
   return (
-    <div className="grid" style={{ gridTemplateColumns: "minmax(0,320px) minmax(0,1fr)", alignItems: "start" }}>
+    <div className="grid wb-grid" style={{ alignItems: "start" }}>
+      <style>{".wb-grid{grid-template-columns:minmax(0,320px) minmax(0,1fr)}@media (max-width:820px){.wb-grid{grid-template-columns:minmax(0,1fr)}}"}</style>
       <aside aria-label="Source registry">
         <div className="card">
           <h2>Sources</h2>

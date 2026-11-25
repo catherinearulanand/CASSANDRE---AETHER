@@ -75,7 +75,7 @@ def test_events_carry_lineage_parents_in_veritas_format_and_approval_node(db, up
     created = next(e for e in ev if e.action == "COLLATERAL_PROPOSAL_CREATED")
     assert created.entity_type == "allocation_proposal"
     parents = {(p["entity_type"], p["entity_id"]) for p in created.payload["parents"]}
-    assert ("margin_result", mid) in parents and ("inventory_snapshot", sid) in parents
+    assert ("risk_result", mid) in parents and ("inventory_snapshot", sid) in parents
     assert all(set(p) == {"entity_type", "entity_id"} for p in created.payload["parents"])
     rec = next(e for e in ev if e.action == "COLLATERAL_APPROVAL_RECORDED")
     assert (rec.entity_type, rec.entity_id) == ("approval", ap)
@@ -87,9 +87,9 @@ def test_events_carry_lineage_parents_in_veritas_format_and_approval_node(db, up
     assert nodes[apn]["stage"] == "APPROVAL" and nodes[apn]["recorded"]
     assert nodes[f"inventory_snapshot:{sid}"]["stage"] == "SNAPSHOT"
     edges = {(e["from"], e["to"]) for e in g["edges"]}
-    assert (f"margin_result:{mid}", prop) in edges and (f"inventory_snapshot:{sid}", prop) in edges and (prop, apn) in edges
+    assert (f"risk_result:{mid}", prop) in edges and (f"inventory_snapshot:{sid}", prop) in edges and (prop, apn) in edges
     # missing links are REPORTED, not hidden (the margin result is recorded by VECTOR, not ATLAS; the fake upstream records nothing)
-    assert any(m["kind"] == "PARENT_NOT_RECORDED" and m["node_id"] == f"margin_result:{mid}" for m in g["missing"])
+    assert any(m["kind"] == "PARENT_NOT_RECORDED" and m["node_id"] == f"risk_result:{mid}" for m in g["missing"])
 
 
 # ------------------------------------------------------------------ replay.collateral

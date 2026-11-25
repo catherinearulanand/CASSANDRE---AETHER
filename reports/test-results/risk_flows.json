@@ -2,22 +2,22 @@
  {
   "check": "A1 import shows EXCEPTION with the independent component sum 10,000,000 and the supplied 10,100,000",
   "ok": true,
-  "detail": "CLR-E2E-6857FB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
+  "detail": "CLR-E2E-BC56BB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
  },
  {
   "check": "A2 the 100,000 difference is stated",
   "ok": true,
-  "detail": "CLR-E2E-6857FB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
+  "detail": "CLR-E2E-BC56BB \u00b7 r1\n\u2715\nEXCEPTION\n\nIndependent sum of components: 10,000,000 INR \u00b7 reported total: 10,100,000 INR \u00b7 difference 100000 INR\n\nreported total differs from independent component sum by 100000"
  },
  {
   "check": "A3 the imported file is listed with status EXCEPTION",
   "ok": true,
-  "detail": "CLR-E2E-6857FB \u00b7 r1\tACC-DEMO-NSE-001\t10,000,000 INR\t10,100,000 INR\t100000\t\n\u2715\nEXCEPTION\t\nRe-reconcile\nMargin with this file"
+  "detail": "CLR-E2E-BC56BB \u00b7 r1\tACC-DEMO-NSE-001\t10,000,000 INR\t10,100,000 INR\t100000\t\n\u2715\nEXCEPTION\t\nRe-reconcile\nMargin with this file"
  },
  {
   "check": "A4 margin with the EXCEPTION file is BLOCKED with the reconciliation reason and shows no required amount",
   "ok": true,
-  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nMargin result\n\u2715\nBLOCKED\nresult f5d8dfbc \u00b7 hash 2908708deaf2\nEvidence \u2192\ni\nETD_IMPORTED_V1 \u00b7 vector/1.0.0\n\u2022\nSYNTHETIC\n\nbusiness as-of 2026-08-17T04:00:00+00:00 \u00b7 snapshot data as of 2026-08-17T03:30:00+00:00\n\nBlocked \u2014 no au"
+  "detail": "Risk & Margin (VECTOR)\nRisk desk\nPortfolio & waterfall\nStress lab\nMethodology\nMargin result\n\u2715\nBLOCKED\nresult 568d8d64 \u00b7 hash 6a88aafb476c\nEvidence \u2192\ni\nETD_IMPORTED_V1 \u00b7 vector/1.0.0\n\u2022\nSYNTHETIC\n\nbusiness as-of 2026-08-17T04:00:00+00:00 \u00b7 snapshot data as of 2026-08-17T03:30:00+00:00\n\nBlocked \u2014 no au"
  },
  {
   "check": "A5 reconciliation-status card reports the account's LATEST file (good file) as OK with 10,000,000",
@@ -77,7 +77,7 @@
  {
   "check": "D0 the G03 result is selectable as the stress baseline",
   "ok": true,
-  "detail": "['\u2014 none \u2014', 'b19f0c1d \u00b7 NS-MER-NWD-001', '22ca48c5 \u00b7 NS-MER-NWD-001']"
+  "detail": "['\u2014 none \u2014', '6c5bd19f \u00b7 NS-MER-NWD-001', 'b19f0c1d \u00b7 NS-MER-NWD-001', '22ca48c5 \u00b7 NS-MER-NWD-001']"
  },
  {
   "check": "D1 stress shows baseline_mutated = false and the baseline exposure 19,469,510.12 USD",
@@ -92,7 +92,7 @@
  {
   "check": "D3 the baseline result is byte-identical after the stress run (hash unchanged)",
   "ok": true,
-  "detail": "ca73025d9c5d vs ca73025d9c5d"
+  "detail": "ef4defd7be5e vs ef4defd7be5e"
  },
  {
   "check": "E1 ArrowRight moves selection and focus to the next tab",
