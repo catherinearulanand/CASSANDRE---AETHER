@@ -115,7 +115,7 @@ def test_lineage_for_g01_has_the_real_stages_and_reports_the_rest_as_missing(flo
     mid = flow["g01_margin"]["result_id"]
     # margin -> proposal and margin -> control edges exist (parents are honoured across the alias margin_result/risk_result)
     assert any(a == f"risk_result:{mid}" and b.startswith("allocation_proposal:") for a, b in edges)
-    assert any(a == f"risk_result:{mid}" and b.startswith("control_evaluation:") for a, b in edges)
+    assert any(a == f"risk_result:{mid}" and b.startswith("cmp_evaluation:") for a, b in edges)
     # seed-time snapshots/rules are found ACROSS correlations (external) rather than reported as missing
     ext = {n["entity_type"] for n in g["nodes"] if n.get("external") and n["recorded"]}
     assert {"risk_snapshot", "reg_rule", "inventory_snapshot"} <= ext, ext
